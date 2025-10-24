@@ -83,7 +83,7 @@ MIDDLEWARE = [
 
 CSRF_TRUSTED_ORIGINS = [
     # "https://publication-brown.vercel.app",
-    "https://scholar-ra71.vercel.app", 
+    "https://scholar-panel.vercel.app", 
     "http://localhost:3000",
     "http://localhost:3001",
 ]
@@ -91,7 +91,7 @@ CSRF_TRUSTED_ORIGINS = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
-    "https://scholar-ra71.vercel.app", 
+    "https://scholar-panel.vercel.app", 
 ]
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
@@ -101,8 +101,8 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://panel-ayrn.onrender.com/',
-    'https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app'
+    'https://panel-ayrn.onrender.com',
+    'scholar-panel-ibvp9bng4-wisdom-chukwuemekas-projects.vercel.app'
 ]
 
 

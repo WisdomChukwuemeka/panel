@@ -14,7 +14,7 @@ if RENDER_EXTERNAL_HOSTNAME:
 else:
     # Fallback for development / debugging
     ALLOWED_HOSTS += ['localhost', '127.0.0.1', 'panel-ayrn.onrender.com/']
-    CSRF_TRUSTED_ORIGINS += ['https://panel-ayrn.onrender.com/', 'https://scholar-ra71.vercel.app']
+    CSRF_TRUSTED_ORIGINS += ['https://panel-ayrn.onrender.com/', 'https://scholar-panel.vercel.app']
 
 
 
