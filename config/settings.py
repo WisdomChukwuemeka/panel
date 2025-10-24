@@ -101,7 +101,7 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://base-panel-3.onrender.com',
+    'https://panel-ayrn.onrender.com/',
     'https://scholar-ra71-15zs4o88h-wisdom-chukwuemekas-projects.vercel.app'
 ]
 
