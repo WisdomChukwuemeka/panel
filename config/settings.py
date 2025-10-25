@@ -40,8 +40,6 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 
-ALLOWED_HOSTS = []  # For production, add your domains e.g., ['yourdomain.com', '.vercel.app']
-
 # Add to settings.py (assuming it's not there)
 PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
@@ -81,29 +79,27 @@ MIDDLEWARE = [
 ]
 
 
-CSRF_TRUSTED_ORIGINS = [
-    # "https://publication-brown.vercel.app",
-    "https://scholar-panel.vercel.app", 
-    "http://localhost:3000",
-    "http://localhost:3001",
+ALLOWED_HOSTS = [
+    'panel-ayrn.onrender.com',
+    'scholar-panel.vercel.app',
+    'localhost',
+    '127.0.0.1',
 ]
-
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "https://scholar-panel.vercel.app", 
-]
-
-CORS_ALLOW_HEADERS = list(default_headers) + [
-    'contenttype',
-    'authorization',
-]
-
 
 CSRF_TRUSTED_ORIGINS = [
     'https://panel-ayrn.onrender.com',
-    'scholar-panel-ibvp9bng4-wisdom-chukwuemekas-projects.vercel.app'
+    'https://scholar-panel.vercel.app',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
 ]
+
+# ✅ Allow frontend to make API calls
+CORS_ALLOWED_ORIGINS = [
+    'https://scholar-panel.vercel.app',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+]
+
 
 
 ROOT_URLCONF = 'config.urls'
