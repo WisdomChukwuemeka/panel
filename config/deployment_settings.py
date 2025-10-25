@@ -34,12 +34,6 @@ MIDDLEWARE = [
 ]
 
 
-CORS_ALLOWED_ORIGINS = [
-    "https://scholar-ra71.vercel.app",
-    "http://localhost:3000",
-    "http://127.0.0.1:3001",
-]
-
 STORAGES = {
     'default': {
         'BACKEND': "django.core.files.storage.FileSystemStorage",  
