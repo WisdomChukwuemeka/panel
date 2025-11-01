@@ -187,8 +187,8 @@ class PublicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Abstract cannot be empty or just whitespace.")
         if len(value) < 200:
             raise serializers.ValidationError("Abstract must be at least 200 characters long.")
-        if len(value) > 1000:
-            raise serializers.ValidationError("Abstract cannot exceed 1000 characters.")
+        if len(value) > 1500:
+            raise serializers.ValidationError("Abstract cannot exceed 1500 characters.")
         return value
 
     def validate_content(self, value):

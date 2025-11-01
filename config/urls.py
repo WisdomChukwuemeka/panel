@@ -25,7 +25,8 @@ urlpatterns = [
     path('api/', include("userprofile.urls")),
     path('api/', include("publications.urls")),
     path('api/', include('payments.urls')),
-    # path('api/', include("comments.urls")),
+    path('api/', include("comments.urls")),
+    path('api/', include("messagebox.urls")),
 ]
 
 if settings.DEBUG:

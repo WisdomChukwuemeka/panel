@@ -57,6 +57,7 @@ class Publication(models.Model):
         default=generate_short_id,
         editable=False,
     )
+    
     title = models.CharField(max_length=255)
     abstract = models.TextField()
     content = models.TextField(blank=True)

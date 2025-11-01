@@ -87,6 +87,7 @@ class Passcode(models.Model):
     code = models.CharField(max_length=50, unique=True, blank=True)
     role = models.CharField(max_length=50, choices=User.ROLE_CHOICES)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='generated_codes')
+    used_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='used_passcodes')  # Add this line if missing
     is_used = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)

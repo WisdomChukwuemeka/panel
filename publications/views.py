@@ -244,6 +244,58 @@ class ViewsUpdateView(generics.UpdateAPIView):
         view, created = Views.objects.get_or_create(publication=publication, user=self.request.user)
         return view
 
+class PublicationLikeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        publication = get_object_or_404(Publication, id=pk)
+        view, created = Views.objects.get_or_create(publication=publication, user=request.user)
+
+        if view.user_liked:
+            # Toggle off like
+            view.user_liked = False
+        else:
+            # Like and remove any existing dislike
+            view.user_liked = True
+            view.user_disliked = False
+
+        view.save()
+        logger.info(f"{request.user.full_name} {'liked' if view.user_liked else 'unliked'} publication {publication.id}")
+
+        return Response({
+            "total_likes": publication.total_likes(),
+            "total_dislikes": publication.total_dislikes(),
+            "user_liked": view.user_liked,
+            "user_disliked": view.user_disliked
+        }, status=status.HTTP_200_OK)
+
+
+class PublicationDislikeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        publication = get_object_or_404(Publication, id=pk)
+        view, created = Views.objects.get_or_create(publication=publication, user=request.user)
+
+        if view.user_disliked:
+            # Toggle off dislike
+            view.user_disliked = False
+        else:
+            # Dislike and remove any existing like
+            view.user_disliked = True
+            view.user_liked = False
+
+        view.save()
+        logger.info(f"{request.user.full_name} {'disliked' if view.user_disliked else 'undisliked'} publication {publication.id}")
+
+        return Response({
+            "total_likes": publication.total_likes(),
+            "total_dislikes": publication.total_dislikes(),
+            "user_liked": view.user_liked,
+            "user_disliked": view.user_disliked
+        }, status=status.HTTP_200_OK)
+
+
 class NotificationListView(generics.ListAPIView):
     serializer_class = NotificationSerializer
     permission_classes = [permissions.IsAuthenticated]

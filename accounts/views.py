@@ -7,6 +7,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import UserSerializer, LoginSerializer, BlockSerializer, PasscodeSerializer,  PasscodeVerificationSerializer
 from django.contrib.auth import authenticate
 from .permissions import IsSuperUser  #  import your custom permission
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.exceptions import Throttled
+
 
 # -----------------------
 # User List & Create
@@ -39,7 +42,7 @@ class UserListCreateView(generics.ListCreateAPIView):
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [IsSuperUser]  # ✅ Only superuser can access
+    permission_classes = [IsSuperUser]  #  Only superuser can access
 
     def retrieve(self, request, *args, **kwargs):
         serializer = self.get_serializer(self.get_object())
@@ -59,21 +62,35 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     
 class LoginView(generics.GenericAPIView):
     serializer_class = LoginSerializer
-    permission_classes = {AllowAny}
-    
+    permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
-        serializer = LoginSerializer(data=request.data)
+        serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.validated_data['user']
-        if user:
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                'user': UserSerializer(user).data,
-                'message': 'Login successfull',
-                "refresh":str(refresh),
-                "access":str(refresh.access_token),
-            }, status=status.HTTP_200_OK)
-            
+
+        # ✅ Block editors without verified passcode
+        if user.role == 'editor' and not user.is_passcode_verified:
+            return Response(
+                {"error": "Editor must verify passcode before logging in."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not user.is_active:
+            return Response(
+                {"error": "This account is inactive. Please contact the administrator."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # ✅ Proceed to issue tokens normally
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'user': UserSerializer(user).data,
+            'message': 'Login successful',
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }, status=status.HTTP_200_OK)
+
             
 
 class BlockUserView(generics.UpdateAPIView):
@@ -112,14 +129,24 @@ class PasscodeListCreateView(generics.ListCreateAPIView):
 
 class VerifyPasscodeView(APIView):
     serializer_class = PasscodeVerificationSerializer
-    permission_classes = [AllowAny]  
-    
+    permission_classes = [AllowAny]  # Changed to AllowAny
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'verify-passcode'
+
     def post(self, request, *args, **kwargs):
-        serializer = PasscodeVerificationSerializer(data=request.data)
-        if serializer.is_valid():
-            passcode = serializer.save()  # 🔥 This line sets is_used=True
+        try:
+            serializer = self.serializer_class(data=request.data)
+            if serializer.is_valid():
+                passcode = serializer.save()
+                return Response(
+                    {"message": f"Passcode {passcode.code} verified successfully."},
+                    status=status.HTTP_200_OK
+                )
+
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Throttled:
             return Response(
-                {"message": f"Passcode {passcode.code} verified successfully."},
-                status=status.HTTP_200_OK
+                {"detail": "Too many attempts. Please wait before trying again."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
             )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

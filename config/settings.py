@@ -63,7 +63,8 @@ INSTALLED_APPS = [
     'userprofile',
     'publications',
     'payments',
-    # 'comments',
+    'messagebox',
+    'comments',
 ]
 
 MIDDLEWARE = [
@@ -136,6 +137,16 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ),  # Enforce JSON responses
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'DEFAULT_THROTTLE_CLASSES': [
+    'rest_framework.throttling.AnonRateThrottle',
+    'rest_framework.throttling.UserRateThrottle'
+  ],
+  'DEFAULT_THROTTLE_RATES': {
+    'anon': '2/minute',
+    'user': '30/minute',
+    'verify-passcode': '2/minute',
+  }
+  
 }
 
 

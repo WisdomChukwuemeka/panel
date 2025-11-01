@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from .models import User, Passcode
+from django.db import transaction
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import authenticate
 import uuid
+from django.db import transaction
 
 # -----------------------
 # User Serializer
@@ -122,6 +124,8 @@ class BlockSerializer(serializers.ModelSerializer):
 
 
 class PasscodeSerializer(serializers.ModelSerializer):
+    role = serializers.ChoiceField(choices=User.ROLE_CHOICES)
+    code = serializers.CharField(read_only=True)
     class Meta:
         model = Passcode
         fields = ['id', 'code', 'role', 'created_by', 'is_used', 'is_active', 'created_at']
@@ -134,29 +138,64 @@ class PasscodeSerializer(serializers.ModelSerializer):
             code = str(uuid.uuid4()).replace('-', '')[:12].upper()
         validated_data['code'] = code
         return super().create(validated_data)
-    
-    
+
+
 class PasscodeVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
     role = serializers.ChoiceField(choices=User.ROLE_CHOICES)
     code = serializers.CharField(required=True, min_length=6, max_length=50)
     
     def validate(self, attrs):
+        """
+        Validate that the passcode exists and is not already used.
+        """
+        email = attrs.get('email')
         role = attrs.get('role')
         code = attrs.get('code').strip()
-        try:
-            passcode = Passcode.objects.get(code=code, role=role, is_active=True, is_used=False)
-            attrs['passcode'] = passcode
-            return attrs
-        except Passcode.DoesNotExist:
-            raise serializers.ValidationError({"code": "Invalid passcode for the selected role."})
-        
-        
-    def save(self, **kwargs):
-        passcode = self.validated_data.get('passcode')
 
-        # ✅ Double check before marking used
-        if not passcode.is_used:
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError({"email": "User with this email does not exist."})
+
+        if user.is_passcode_verified:
+            raise serializers.ValidationError("User is already verified.")
+
+        if user.role != role:
+            raise serializers.ValidationError("Passcode role does not match user's role.")
+
+        # Check if passcode exists
+        if not Passcode.objects.filter(code=code, role=role, is_active=True, is_used=False).exists():
+            raise serializers.ValidationError({"code": "Invalid passcode."})
+
+        attrs['code'] = code
+        attrs['role'] = role
+        attrs['user'] = user  # Store user for save()
+        return attrs
+
+    def save(self, **kwargs):
+        """
+        Atomically lock and mark the passcode as used.
+        """
+        code = self.validated_data['code']
+        role = self.validated_data['role']
+        user = self.validated_data['user']
+
+        with transaction.atomic():
+            try:
+                passcode = Passcode.objects.select_for_update().get(
+                    code=code, role=role, is_active=True, is_used=False
+                )
+            except Passcode.DoesNotExist:
+                raise serializers.ValidationError({
+                    "code": "This passcode has already been used or is invalid."
+                })
+
             passcode.is_used = True
-            passcode.save(update_fields=['is_used'])
+            passcode.used_by = user
+            passcode.save(update_fields=['is_used', 'used_by'])
+
+            user.is_passcode_verified = True
+            user.save(update_fields=['is_passcode_verified'])
 
         return passcode
