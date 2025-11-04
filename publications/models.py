@@ -86,6 +86,14 @@ class Publication(models.Model):
     )
     rejection_count = models.PositiveIntegerField(default=0)
     rejection_note = models.TextField(blank=True, null=True)
+    annotated_file = models.FileField(
+        upload_to='annotations/', 
+        null=True, 
+        blank=True, 
+        storage=RawMediaCloudinaryStorage()
+    )
+    editor_comments = models.TextField(blank=True, null=True)
+
     publication_date = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -109,7 +117,9 @@ class Publication(models.Model):
         if not is_new:
             old_instance = Publication.objects.get(pk=self.pk)
             old_status = old_instance.status
-
+            
+        if old_status == 'rejected' and self.status in ['draft', 'pending']:
+            self.status = 'under_review'
         # Save the instance first to ensure pk is set
         super().save(*args, **kwargs)
 

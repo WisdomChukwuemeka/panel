@@ -32,7 +32,8 @@ class PublicationSerializer(serializers.ModelSerializer):
     is_free_review = serializers.BooleanField(default=False)  # Editable for resubmissions
     rejection_count = serializers.IntegerField(read_only=True)
     has_paid = serializers.SerializerMethodField()
-
+    annotated_file = serializers.FileField(required=False, allow_null=True)
+    
     class Meta:
         model = Publication
         fields = [
@@ -59,6 +60,8 @@ class PublicationSerializer(serializers.ModelSerializer):
             "total_dislikes",
             "rejection_note",
             "rejection_count",
+            'annotated_file', 
+            'editor_comments',
         ]
         read_only_fields = [
             "author",
@@ -96,10 +99,9 @@ class PublicationSerializer(serializers.ModelSerializer):
         instance = self.instance
         if instance:
             valid_transitions = {
-                "draft": ["pending"],
-                "pending": ["under_review"],
+                "draft": ["under_review"],  # Updated: Skip pending for initial submissions if desired
                 "under_review": ["approved", "rejected"],
-                "rejected": ["pending"],
+                "rejected": ["under_review"],  # Updated: Direct to under_review on resubmission
                 "approved": [],  # No transitions from approved
             }
             if value != instance.status and value not in valid_transitions.get(instance.status, []):
@@ -153,6 +155,10 @@ class PublicationSerializer(serializers.ModelSerializer):
         if category_name is not None:
             category_obj, _ = Category.objects.get_or_create(name=category_name)
             instance.category = category_obj
+            
+        instance.editor_comments = validated_data.get('editor_comments', instance.editor_comments)
+        if 'annotated_file' in validated_data:
+            instance.annotated_file = validated_data['annotated_file']
 
         instance.save()
         return instance
@@ -225,6 +231,11 @@ class PublicationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Cannot have more than 20 keywords.")
             return ','.join(keywords)
         return value
+    
+    def annotated_file(self, obj):
+        if obj.annotated_file:
+            return obj.annotated_file.url
+        return None
 
 class NotificationSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField(read_only=True)

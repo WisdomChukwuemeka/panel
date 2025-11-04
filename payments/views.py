@@ -60,8 +60,8 @@ class InitializePublicationPaymentView(APIView):
         payload = {
             "amount": int(amount * 100),  # Paystack expects amount in kobo
             "email": request.user.email,
-            # "callback_url": 'http://localhost:3000/paystack/callback/',
-            "callback_url": 'https://scholar-panel.vercel.app/paystack/callback/',
+            "callback_url": 'http://localhost:3000/paystack/callback/',
+            # "callback_url": 'https://scholar-panel.vercel.app/paystack/callback/',
             "metadata": {"publication_id": publication_id} if publication_id else {}
         }
 

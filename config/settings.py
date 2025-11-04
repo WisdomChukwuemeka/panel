@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'payments',
     'messagebox',
     'comments',
+    'points',
 ]
 
 MIDDLEWARE = [

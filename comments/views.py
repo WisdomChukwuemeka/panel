@@ -8,6 +8,7 @@ from publications.models import Publication
 class CommentListCreateView(generics.ListCreateAPIView):
     serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # Disable pagination to return all comments
 
     def get_queryset(self):
         publication_id = self.kwargs["pk"]

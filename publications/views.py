@@ -202,7 +202,6 @@ class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
             publication_date=instance.publication_date,
             rejection_count=instance.rejection_count
         )
-        print(serializer.errors)  # Add this
 
         # Create notification for status change
         if new_status != old_status:
@@ -215,6 +214,21 @@ class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
                 related_publication=instance
             )
             logger.info(f"Notification created for {instance.author.full_name}: {message}")
+            
+            if new_status == "under_review" and self.request.user.role == "author":
+                editors = User.objects.filter(role="editor")
+                notifications = [
+                    Notification(
+                        user=editor,
+                        message=(
+                            f"New publication '{instance.title}' was submitted for review by "
+                            f"{self.request.user.full_name} at "
+                            f"{timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}."
+                        ),
+                        related_publication=instance
+                    )
+                    for editor in editors
+                ]
 
             # Notify other editors if approved, rejected, or under_review
             if new_status in ['approved', 'rejected', 'under_review'] and self.request.user.role == 'editor':
@@ -339,3 +353,22 @@ class FreeReviewStatusView(APIView):
             'free_reviews_used': sub.free_reviews_used,
             'has_free_review_available': sub.has_free_review_available()
         })
+        
+class PublicationAnnotateView(generics.UpdateAPIView):
+    serializer_class = PublicationSerializer
+    permission_classes = [IsEditor]
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        return Publication.objects.all()
+
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        annotated_file = self.request.FILES.get('annotated_file')
+        comments = self.request.data.get('editor_comments')
+
+        if annotated_file:
+            serializer.save(annotated_file=annotated_file, editor_comments=comments)
+        else:
+            serializer.save(editor_comments=comments)
+        return instance
