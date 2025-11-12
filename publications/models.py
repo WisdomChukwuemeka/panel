@@ -45,9 +45,9 @@ def generate_short_id():
 class Publication(models.Model):
     STATUS_CHOICES = [
         ('draft', 'Draft'),
+        ('pending', 'Pending'),
         ('under_review', 'Under Review'),
         ('rejected', 'Rejected'),
-        ('needs_revision', 'Needs Revision'),
         ('approved', 'Approved'),
     ]
 
@@ -110,19 +110,38 @@ class Publication(models.Model):
         return self.title
 
     def save(self, *args, **kwargs):
-        is_new = self._state.adding  # this is True only when creating
+        is_new = self._state.adding  # True only when creating
         old_status = None
 
         # If updating, get the old instance to check for status changes
         if not is_new:
             old_instance = Publication.objects.get(pk=self.pk)
             old_status = old_instance.status
-            
+
+        # Force under_review when author resubmits a rejected paper
         if old_status == 'rejected' and self.status in ['draft', 'pending']:
             self.status = 'under_review'
-        # Save the instance first to ensure pk is set
+
+        # Save the instance first (so we have pk and updated fields)
         super().save(*args, **kwargs)
 
+        # === NEW: Log editor actions to ReviewHistory ===
+        if old_status and old_status != self.status and self.editor:
+            action_map = {
+                'under_review': 'under_review',
+                'approved': 'approved',
+                'rejected': 'rejected'
+            }
+            action = action_map.get(self.status)
+            if action:
+                ReviewHistory.objects.create(
+                    publication=self,
+                    editor=self.editor,
+                    action=action,
+                    note=self.rejection_note if self.status == 'rejected' else self.editor_comments
+                )
+
+        # === Existing notification logic (keep this too!) ===
         if is_new:
             # Notify editors for new submission
             editors = User.objects.filter(role='editor')
@@ -134,7 +153,6 @@ class Publication(models.Model):
                         related_publication=self
                     )
             else:
-                # Notify author if no editors are available
                 Notification.objects.create(
                     user=self.author,
                     message=f"No editors available to review your publication '{self.title}' submitted at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}. Please contact an administrator.",
@@ -155,7 +173,7 @@ class Publication(models.Model):
                         user=editor,
                         message=f"Publication '{self.title}' status updated to '{self.get_status_display()}' at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}.",
                         related_publication=self
-                    )
+                    )    
                     
     def total_likes(self):
         return self.view_stats.filter(user_liked=True).count()
@@ -163,6 +181,19 @@ class Publication(models.Model):
     def total_dislikes(self):
         return self.view_stats.filter(user_disliked=True).count()
 
+class ReviewHistory(models.Model):
+    publication = models.ForeignKey(Publication, on_delete=models.CASCADE, related_name='review_history')
+    editor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='review_actions')
+    action = models.CharField(max_length=20, choices=[('under_review', 'Under Review'), ('approved', 'Approved'), ('rejected', 'Rejected')])
+    note = models.TextField(blank=True, null=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.editor} {self.action} {self.publication.title} at {self.timestamp}"
+    
 
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
@@ -194,3 +225,4 @@ class Views(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.publication.title}"
+    

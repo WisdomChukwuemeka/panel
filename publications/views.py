@@ -4,8 +4,8 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 from rest_framework import serializers
-from .models import Publication, Notification, Views
-from .serializers import PublicationSerializer, NotificationSerializer, ViewsSerializer
+from .models import Publication, Notification, Views, ReviewHistory
+from .serializers import PublicationSerializer, ReviewHistorySerializer, NotificationSerializer, ViewsSerializer, StatsSerializer
 from payments.models import Payment, Subscription
 from .pagination import StandardResultsPagination, DashboardResultsPagination
 from django.utils import timezone
@@ -14,6 +14,8 @@ import logging
 from accounts.models import User
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.db.models.functions import TruncMonth
+from django.db.models import Count, Case, When, IntegerField, Sum
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ class IsAuthorOrEditor(permissions.BasePermission):
 
 class IsEditor(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role == 'editor'
+        return request.user.role == 'admin' or request.user.role == 'editor' 
 
 class PublicationListCreateView(generics.ListCreateAPIView):
     serializer_class = PublicationSerializer
@@ -41,7 +43,7 @@ class PublicationListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         search = self.request.query_params.get('search', None)
         if user.role == 'editor':
-            return Publication.objects.all()  # Editors see all publications
+            queryset = Publication.objects.all()  # Editors see all publications
         else: 
             queryset = Publication.objects.filter(
                 Q(author=user) | Q(status='approved')
@@ -97,11 +99,14 @@ class PublicationDetailView(generics.RetrieveAPIView):
             logger.error(f"Unexpected error in retrieve: {str(e)}")
             return Response({"detail": "An unexpected error occurred"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+# views.py
+# views.py
+# views.py
 class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PublicationSerializer
-    pagination_class = StandardResultsPagination
     permission_classes = [permissions.IsAuthenticated, IsAuthorOrEditor]
     lookup_field = 'id'
+    queryset = Publication.objects.all()
 
     def get_queryset(self):
         user = self.request.user
@@ -109,145 +114,149 @@ class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
             return Publication.objects.all()
         return Publication.objects.filter(author=user)
 
-    def validate_status_transition(self, instance, new_status):
-        valid_transitions = {
-            'draft': ['pending'],
-            'pending': ['under_review'],
-            'under_review': ['approved', 'rejected'],
-            'rejected': ['pending'],
-            'approved': []
-        }
-        if new_status != instance.status and new_status not in valid_transitions.get(instance.status, []):
-            raise serializers.ValidationError({
-                "status": f"Cannot transition from {instance.status} to {new_status}."
-            })
-
     @transaction.atomic
     def perform_update(self, serializer):
-        instance = serializer.instance
-        old_status = instance.status
-        new_status = serializer.validated_data.get('status', old_status)
-        is_free_review = serializer.validated_data.get('is_free_review', instance.is_free_review)
-        rejection_note = serializer.validated_data.get('rejection_note', instance.rejection_note)
+        instance = self.get_object()
+        user = self.request.user
+        data = serializer.validated_data.copy()
 
-        # Validate status transition
-        self.validate_status_transition(instance, new_status)
+        # AUTHOR: Save as Draft
+        if user == instance.author:
+            data.pop('status', None)
+            data.pop('is_free_review', None)
+            serializer.save(**data)
+            return
 
-        # Log update details
-        logger.info(f"Updating publication {instance.id} by user {self.request.user.id} ({self.request.user.full_name}): "
-                    f"status={new_status}, fields={list(serializer.validated_data.keys())}")
+        # AUTHOR: Resubmit
+        if data.get('status') == 'pending' and user == instance.author:
+            if instance.status != 'rejected':
+                raise serializers.ValidationError("Only rejected publications can be resubmitted.")
 
-        # Validate editor actions
-        if self.request.user.role == 'editor':
-            if new_status not in ['under_review', 'approved', 'rejected']:
-                raise serializers.ValidationError({
-                    "status": "Editors can only set status to 'under_review', 'approved', or 'rejected'."
-                })
-            if new_status == 'rejected' and not rejection_note:
-                raise serializers.ValidationError({
-                    "rejection_note": "A rejection note is required when rejecting a publication."
-                })
-            if new_status == 'rejected':
-                instance.rejection_count += 1
-            if not instance.editor:
-                instance.editor = self.request.user
-            if new_status == 'approved':
-                instance.publication_date = timezone.now()
+            has_paid = Payment.objects.filter(
+                user=user,
+                payment_type='review_fee',
+                metadata__publication_id=str(instance.id),
+                status='success'
+            ).exists()
 
-        # Handle author submission/resubmission (set to 'pending')
-        elif self.request.user == instance.author and new_status == 'pending':
-            if instance.rejection_count == 0:
-                payment = Payment.objects.filter(
-                    user=self.request.user,
-                    payment_type='publication_fee',
-                    metadata__publication_id=str(instance.id),
-                    status='success',
-                    used=False
-                ).first()
-                if not payment:
-                    raise serializers.ValidationError({
-                        "status": "Payment for publication fee (₦25,000) is required for initial submission."
-                    })
-                payment.used = True
-                payment.save()
-                sub, created = Subscription.objects.get_or_create(user=self.request.user)
-                sub.free_reviews_granted = True
+            is_free = data.get('is_free_review', False)
+            if not has_paid and not is_free:
+                raise serializers.ValidationError("Payment of ₦3,000 required.")
+
+            if is_free:
+                sub = Subscription.objects.get(user=user)
+                if not sub.has_free_review_available():
+                    raise serializers.ValidationError("No free reviews.")
+                sub.free_reviews_used += 1
                 sub.save()
-            else:
-                if is_free_review:
-                    sub, created = Subscription.objects.get_or_create(user=self.request.user)
-                    if not sub.has_free_review_available():
-                        raise serializers.ValidationError({
-                            "is_free_review": "No free reviews available."
-                        })
-                    sub.use_free_review()
-                else:
-                    payment = Payment.objects.filter(
-                        user=self.request.user,
-                        payment_type='review_fee',
-                        metadata__publication_id=str(instance.id),
-                        status='success',
-                        used=False
-                    ).first()
-                    if not payment:
-                        raise serializers.ValidationError({
-                            "status": "Payment for review fee (₦3,000) is required after free reviews are exhausted."
-                        })
-                    payment.used = True
-                    payment.save()
 
-        # Save editor-specific fields (other fields handled by serializer.update)
-        serializer.save(
-            editor=instance.editor,
-            publication_date=instance.publication_date,
-            rejection_count=instance.rejection_count
+            serializer.save(status='pending', is_free_review=is_free)
+            return
+
+        raise serializers.ValidationError("Use /review/ endpoint.")
+
+# views.py
+class EditorReviewView(APIView):
+    permission_classes = [IsEditor]
+
+    def post(self, request, id):
+        pub = get_object_or_404(Publication, id=id)
+        action = request.data.get('action')
+        note = request.data.get('rejection_note', '').strip()
+
+        if action not in ['under_review', 'approve', 'reject']:
+            return Response({"detail": "Invalid action"}, status=400)
+
+        if action == 'reject' and not note:
+            return Response({"detail": "Rejection note required"}, status=400)
+   
+    # 🔒 Prevent changing Approved or Rejected publications
+        if pub.status in ['approved', 'rejected']:
+            return Response(
+                {"detail": f"Cannot modify a publication that is already {pub.status}."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # === FIXED: Now properly indented inside the method ===
+        action_map = {
+            'under_review': 'under_review',
+            'approve': 'approved',
+            'reject': 'rejected'
+        }
+        review_action = action_map[action]
+
+        old_status = pub.status
+
+        if action == 'reject':
+            pub.status = 'rejected'
+            pub.rejection_count += 1
+            pub.rejection_note = note
+        elif action == 'approve':
+            pub.status = 'approved'
+            pub.publication_date = timezone.now()
+        else:  # under_review
+            pub.status = 'under_review'
+
+        pub.editor = request.user
+        pub.save()  # This triggers your save() override too
+
+        # THIS WILL NOW WORK
+        ReviewHistory.objects.create(
+            publication=pub,
+            editor=request.user,
+            action=review_action,
+            note=note if action == 'reject' else None
         )
 
-        # Create notification for status change
-        if new_status != old_status:
-            message = f"Your publication '{instance.title}' has been {new_status.replace('_', ' ')}."
-            if new_status == 'rejected' and rejection_note:
-                message += f" Reason: {rejection_note}"
-            Notification.objects.create(
-                user=instance.author,
-                message=message,
-                related_publication=instance
-            )
-            logger.info(f"Notification created for {instance.author.full_name}: {message}")
-            
-            if new_status == "under_review" and self.request.user.role == "author":
-                editors = User.objects.filter(role="editor")
-                notifications = [
-                    Notification(
-                        user=editor,
-                        message=(
-                            f"New publication '{instance.title}' was submitted for review by "
-                            f"{self.request.user.full_name} at "
-                            f"{timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}."
-                        ),
-                        related_publication=instance
-                    )
-                    for editor in editors
-                ]
+        # Notify author
+        Notification.objects.create(
+            user=pub.author,
+            message=f"Your publication '{pub.title}' has been {pub.get_status_display().lower()}.",
+            related_publication=pub
+        )
 
-            # Notify other editors if approved, rejected, or under_review
-            if new_status in ['approved', 'rejected', 'under_review'] and self.request.user.role == 'editor':
-                editors = User.objects.filter(role='editor').exclude(id=self.request.user.id)
-                notifications = [
-                    Notification(
-                        user=editor,
-                        message=(
-                            f"Publication '{instance.title}' was {new_status} by "
-                            f"{self.request.user.full_name} at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}."
-                            + (f" Reason: {rejection_note}" if new_status == 'rejected' and rejection_note else "")
-                        ),
-                        related_publication=instance
-                    )
-                    for editor in editors
-                ]
-                Notification.objects.bulk_create(notifications)
-                logger.info(f"Notifications created for {len(notifications)} editors")
+        return Response({
+            "detail": "Success",
+            "status": pub.status,
+            "review_history_created": True
+        })
+        
+# views.py (add this new view)
+class EditorActivitiesView(generics.ListAPIView):
+    serializer_class = ReviewHistorySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsPagination
 
+    def get_queryset(self):
+        queryset = ReviewHistory.objects.select_related('publication', 'publication__author', 'editor').order_by('-timestamp')
+        if self.request.user.role == 'admin':
+            editor_id = self.request.query_params.get('editor_id')
+            if editor_id:
+                queryset = queryset.filter(editor__id=editor_id)
+        elif self.request.user.role == 'editor':
+            queryset = queryset.filter(editor=self.request.user)
+        else:
+            raise serializers.ValidationError("You do not have permission to access this resource.")
+        
+        publication_id = self.request.query_params.get('publication_id')
+        if publication_id:
+            queryset = queryset.filter(publication__id=publication_id)
+        
+        from_date = self.request.query_params.get('from_date')
+        if from_date:
+            queryset = queryset.filter(timestamp__gte=from_date)
+        
+        to_date = self.request.query_params.get('to_date')
+        if to_date:
+            queryset = queryset.filter(timestamp__lte=to_date)
+        
+        action = self.request.query_params.get('action')
+        if action:
+            queryset = queryset.filter(action=action)
+        
+        return queryset
+
+        
 class ViewsUpdateView(generics.UpdateAPIView):
     serializer_class = ViewsSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -372,3 +381,99 @@ class PublicationAnnotateView(generics.UpdateAPIView):
         else:
             serializer.save(editor_comments=comments)
         return instance
+    
+class StatsSerializer(serializers.Serializer):
+    total_publications = serializers.IntegerField()
+    approved = serializers.IntegerField()
+    rejected = serializers.IntegerField()
+    under_review = serializers.IntegerField()
+    draft = serializers.IntegerField()
+    total_likes = serializers.IntegerField()
+    total_dislikes = serializers.IntegerField()
+    monthly_data = serializers.DictField()
+    editors_actions = serializers.DictField()
+    total_payments = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_subscriptions = serializers.DecimalField(max_digits=12, decimal_places=2)
+    payment_details = serializers.DictField()
+    subscription_details = serializers.DictField()
+
+class PublicationStatsView(APIView):
+    permission_classes = [IsEditor]
+    pagination_class = DashboardResultsPagination
+
+    def get(self, request):
+        total_publications = Publication.objects.count()
+        approved = Publication.objects.filter(status='approved').count()
+        rejected = Publication.objects.filter(status='rejected').count()
+        under_review = Publication.objects.filter(status='under_review').count()
+        draft = Publication.objects.filter(status='draft').count()
+        total_likes = Views.objects.filter(user_liked=True).count()
+        total_dislikes = Views.objects.filter(user_disliked=True).count()
+
+        # Paginated monthly data
+        monthly_qs = Publication.objects.annotate(
+            month=TruncMonth('created_at')
+        ).values('month').annotate(
+            total=Count('id'),
+            approved=Count(Case(When(status='approved', then=1), output_field=IntegerField())),
+            rejected=Count(Case(When(status='rejected', then=1), output_field=IntegerField())),
+            under_review=Count(Case(When(status='under_review', then=1), output_field=IntegerField())),
+            draft=Count(Case(When(status='draft', then=1), output_field=IntegerField())),
+        ).order_by('month')
+        monthly_paginator = self.pagination_class()
+        monthly_paginator.page_query_param = 'monthly_page'
+        monthly_paginator.page_size_query_param = 'monthly_size'
+        monthly_page = monthly_paginator.paginate_queryset(monthly_qs, request)
+        monthly_paginated = monthly_paginator.get_paginated_response(monthly_page).data
+
+        # Paginated editors actions
+        editors_actions_qs = Publication.objects.exclude(editor=None).values('editor__full_name').annotate(
+            approved=Count(Case(When(status='approved', then=1), output_field=IntegerField())),
+            rejected=Count(Case(When(status='rejected', then=1), output_field=IntegerField())),
+        ).order_by('editor__full_name')
+        editors_paginator = self.pagination_class()
+        editors_paginator.page_query_param = 'editors_page'
+        editors_paginator.page_size_query_param = 'editors_size'
+        editors_page = editors_paginator.paginate_queryset(editors_actions_qs, request)
+        editors_actions_paginated = editors_paginator.get_paginated_response(editors_page).data
+
+        total_payments = Payment.objects.filter(status='success', payment_type='publication_fee').aggregate(total=Sum('amount'))['total']
+        total_subscriptions = Payment.objects.filter(status='success', payment_type='review_fee').aggregate(total=Sum('amount'))['total'] 
+
+        # Paginated payment details
+        payment_details_qs = Payment.objects.filter(status='success').values('user__full_name', 'payment_type').annotate(
+            total_amount=Sum('amount'), count=Count('id')
+        ).order_by('user__full_name')
+        payments_paginator = self.pagination_class()
+        payments_paginator.page_query_param = 'payments_page'
+        payments_paginator.page_size_query_param = 'payments_size'
+        payments_page = payments_paginator.paginate_queryset(payment_details_qs, request)
+        payment_details_paginated = payments_paginator.get_paginated_response(payments_page).data
+
+        # Paginated subscription details
+        subscription_details_qs = Subscription.objects.values('user__full_name', 'free_reviews_used', 'free_reviews_granted').order_by('user__full_name')
+        subs_paginator = self.pagination_class()
+        subs_paginator.page_query_param = 'subs_page'
+        subs_paginator.page_size_query_param = 'subs_size'
+        subs_page = subs_paginator.paginate_queryset(subscription_details_qs, request)
+        subscription_details_paginated = subs_paginator.get_paginated_response(subs_page).data
+
+        data = {
+            'total_publications': total_publications,
+            'approved': approved,
+            'rejected': rejected,
+            'under_review': under_review,
+            'draft': draft,
+            'total_likes': total_likes,
+            'total_dislikes': total_dislikes,
+            'monthly_data': monthly_paginated,
+            'editors_actions': editors_actions_paginated,
+            'total_payments': total_payments,
+            'total_subscriptions': total_subscriptions,
+            'payment_details': payment_details_paginated,
+            'subscription_details': subscription_details_paginated,
+        }
+        serializer = StatsSerializer(data=data)
+        if serializer.is_valid():
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -100,6 +100,7 @@ CORS_ALLOWED_ORIGINS = [
     'https://scholar-panel.vercel.app',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'http://localhost:3001',
 ]
 
 
@@ -144,8 +145,9 @@ REST_FRAMEWORK = {
   ],
   'DEFAULT_THROTTLE_RATES': {
     'anon': '2/minute',
-    'user': '30/minute',
+    'user': '100/minute',
     'verify-passcode': '2/minute',
+    'polling': '100/minute',
   }
   
 }

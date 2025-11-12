@@ -1,7 +1,9 @@
 from rest_framework import serializers
-from .models import Publication, Category, Views, Notification
+from .models import Publication, ReviewHistory, Category, Views, Notification
 from payments.models import Subscription, Payment
 import logging
+from django.core.files.uploadedfile import InMemoryUploadedFile, TemporaryUploadedFile
+
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +101,10 @@ class PublicationSerializer(serializers.ModelSerializer):
         instance = self.instance
         if instance:
             valid_transitions = {
-                "draft": ["under_review"],  # Updated: Skip pending for initial submissions if desired
+                "draft": ['pending', 'under_review'],  # Updated: Skip pending for initial submissions if desired
+                "pending": ["under_review"],
                 "under_review": ["approved", "rejected"],
-                "rejected": ["under_review"],  # Updated: Direct to under_review on resubmission
+                "rejected": ['pending'],  # Updated: Direct to under_review on resubmission
                 "approved": [],  # No transitions from approved
             }
             if value != instance.status and value not in valid_transitions.get(instance.status, []):
@@ -123,6 +126,31 @@ class PublicationSerializer(serializers.ModelSerializer):
             publication.category = category_obj
             publication.save()
         return publication
+    
+    def validate(self, attrs):
+        instance = self.instance
+        status = attrs.get("status")
+
+        # Only when author resubmits a rejected paper
+        if (
+            instance
+            and instance.status == "rejected"
+            and status in ["pending", "under_review"]
+            and self.context["request"].user == instance.author
+        ):
+
+            changed = (
+                attrs.get("title") != instance.title or
+                attrs.get("abstract") != instance.abstract or
+                attrs.get("content") != instance.content or
+                "file" in self.context["request"].FILES or
+                "video_file" in self.context["request"].FILES
+            )
+            if not changed:
+                raise serializers.ValidationError({
+                    "status": " Please ensure content is updated before resubmitting."
+                })
+        return attrs
 
     def update(self, instance, validated_data):
         logger.info(f"Updating publication with validated_data: {validated_data}")
@@ -133,23 +161,39 @@ class PublicationSerializer(serializers.ModelSerializer):
         # Check user permissions for status updates (assuming is_editor check)
         request = self.context.get('request')
         # Prevent non-editors from changing status
+        # Instead of removing all status changes for non-editors:
         if request.user.role != "editor":
-            validated_data.pop("status", None)
+            if validated_data.get("status") not in ["pending", "under_review"]:
+                validated_data.pop("status", None)
+
 
         if "status" in validated_data:
-            if not request or not request.user.is_authenticated or request.user.role != 'editor':
-                raise serializers.ValidationError("Only editors can update publication status.")
-            instance.status = validated_data.pop("status")  # Remove status from validated_data
+            new_status = validated_data["status"]
+            if request.user.role != "editor":
+                # Only allow rejected → pending transitions by author
+                if not (instance.status == "rejected" and new_status == "pending"):
+                    validated_data.pop("status", None)
+            else:
+                instance.status = validated_data.pop("status")
 
         # Editable fields for authors
         editable_fields = ["title", "abstract", "content", "file", "video_file", "keywords", "is_free_review", "rejection_note"]
         for field in editable_fields:
             if field in validated_data:
                 value = validated_data.get(field)
-                if field in ["file", "video_file"] and value in [None, "", "null", "undefined"]:
-                    setattr(instance, field, None)
-                elif value is not None:  # Skip None for non-file fields
-                    setattr(instance, field, value)
+                if field in ["file", "video_file"]:
+                    value = validated_data.get(field)
+                    if value in [None, "", "null", "undefined"]:
+                        if getattr(instance, field):
+                            getattr(instance, field).delete(save=False)
+                        setattr(instance, field, None)
+                    elif isinstance(value, (InMemoryUploadedFile, TemporaryUploadedFile)):
+                        # Let Cloudinary handle it automatically
+                        setattr(instance, field, value)
+                else:
+                    if value is not None:  # Skip None for non-file fields
+                        setattr(instance, field, value)
+                        
 
         # Handle category if provided
         if category_name is not None:
@@ -193,8 +237,8 @@ class PublicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Abstract cannot be empty or just whitespace.")
         if len(value) < 200:
             raise serializers.ValidationError("Abstract must be at least 200 characters long.")
-        if len(value) > 1500:
-            raise serializers.ValidationError("Abstract cannot exceed 1500 characters.")
+        if len(value) > 2500:
+            raise serializers.ValidationError("Abstract cannot exceed 2500 characters.")
         return value
 
     def validate_content(self, value):
@@ -202,8 +246,8 @@ class PublicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Content cannot be empty or just whitespace.")
         if len(value) < 500:
             raise serializers.ValidationError("Content must be at least 500 characters long.")
-        if len(value) > 10000:
-            raise serializers.ValidationError("Content cannot exceed 10000 characters.")
+        if len(value) > 15000:
+            raise serializers.ValidationError("Content cannot exceed 15000 characters.")
         return value
 
     def validate_file(self, value):
@@ -236,6 +280,7 @@ class PublicationSerializer(serializers.ModelSerializer):
         if obj.annotated_file:
             return obj.annotated_file.url
         return None
+    
 
 class NotificationSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField(read_only=True)
@@ -260,3 +305,31 @@ class NotificationSerializer(serializers.ModelSerializer):
         instance.is_read = validated_data.get('is_read', instance.is_read)
         instance.save()
         return instance
+    
+class StatsSerializer(serializers.Serializer):
+    total_publications = serializers.IntegerField()
+    approved = serializers.IntegerField()
+    rejected = serializers.IntegerField()
+    under_review = serializers.IntegerField()
+    draft = serializers.IntegerField()
+    total_likes = serializers.IntegerField()
+    total_dislikes = serializers.IntegerField()
+    monthly_data = serializers.ListField(child=serializers.DictField())
+    editors_actions = serializers.ListField(child=serializers.DictField())
+    total_payments = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_subscriptions = serializers.DecimalField(max_digits=12, decimal_places=2)
+    payment_details = serializers.ListField(child=serializers.DictField())
+    subscription_details = serializers.ListField(child=serializers.DictField())
+    
+    
+# serializers.py (add this new serializer)
+class ReviewHistorySerializer(serializers.ModelSerializer):
+    publication_title = serializers.CharField(source='publication.title', read_only=True)
+    author_name = serializers.CharField(source='publication.author.full_name', read_only=True)
+    editor_name = serializers.CharField(source='editor.full_name', read_only=True)
+    rejection_count = serializers.IntegerField(source='publication.rejection_count', read_only=True)
+
+    class Meta:
+        model = ReviewHistory
+        fields = ['id', 'publication', 'publication_title', 'author_name', 'editor_name', 'action', 'note', 'timestamp', 'rejection_count']
+        read_only_fields = fields
