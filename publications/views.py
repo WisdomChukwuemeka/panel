@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
-from rest_framework import serializers
+from rest_framework import serializers, permissions
 from .models import Publication, Notification, Views, ReviewHistory
 from .serializers import PublicationSerializer, ReviewHistorySerializer, NotificationSerializer, ViewsSerializer, StatsSerializer
 from payments.models import Payment, Subscription
@@ -15,8 +15,9 @@ from accounts.models import User
 from django.db.models import DecimalField
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from django.db.models.functions import TruncMonth
-from django.db.models import Count, Case, When, IntegerField, Sum
+from django.db.models.functions import TruncMonth, Coalesce
+from django.db.models import Q, Count, Case, When, IntegerField, Sum, F, Value
+
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,29 @@ class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
             data.pop('is_free_review', None)
             serializer.save(**data)
             return
+        
+        
+        old_status = instance.status  # previous status before update
 
+        # Save the update normally for editors
+        serializer.save()
+        instance.refresh_from_db()
+
+        new_status = instance.status
+
+        # Prevent duplicate history if request is retried
+        if user.role == "editor" and old_status != new_status:
+            if not ReviewHistory.objects.filter(
+                publication=instance,
+                action=new_status
+            ).exists():
+                ReviewHistory.objects.create(
+                    publication=instance,
+                    editor=user,
+                    action=new_status,
+                    note=instance.rejection_note or ""
+                )
+        return
         raise serializers.ValidationError("Use /review/ endpoint.")
 
 
@@ -208,11 +231,13 @@ class EditorReviewView(APIView):
         pub.save()  # This triggers your save() override too
 
         # THIS WILL NOW WORK
-        ReviewHistory.objects.create(
+        ReviewHistory.objects.update_or_create(
             publication=pub,
-            editor=request.user,
             action=review_action,
-            note=note if action == 'reject' else None
+            defaults={
+                "editor": request.user,
+                "note": note if action == "reject" else None
+            }
         )
 
         # Notify author
@@ -236,33 +261,50 @@ class EditorActivitiesView(generics.ListAPIView):
 
     def get_queryset(self):
         queryset = ReviewHistory.objects.select_related('publication', 'publication__author', 'editor').order_by('-timestamp')
-        if self.request.user.role == 'admin':
+        user = self.request.user
+
+        if user.role == 'admin':
             editor_id = self.request.query_params.get('editor_id')
             if editor_id:
                 queryset = queryset.filter(editor__id=editor_id)
-        elif self.request.user.role == 'editor':
-            queryset = queryset.filter(editor=self.request.user)
+        elif user.role == 'editor':
+            queryset = queryset.filter(editor=user)
         else:
             raise serializers.ValidationError("You do not have permission to access this resource.")
-        
+
+        # Filters
         publication_id = self.request.query_params.get('publication_id')
         if publication_id:
             queryset = queryset.filter(publication__id=publication_id)
-        
+
         from_date = self.request.query_params.get('from_date')
         if from_date:
             queryset = queryset.filter(timestamp__gte=from_date)
-        
+
         to_date = self.request.query_params.get('to_date')
         if to_date:
             queryset = queryset.filter(timestamp__lte=to_date)
-        
+
         action = self.request.query_params.get('action')
         if action:
             queryset = queryset.filter(action=action)
-        
+
         return queryset
 
+    def list(self, request, *args, **kwargs):
+        summary = request.query_params.get('summary', 'false').lower() == 'true'
+        if summary:
+            queryset = self.get_queryset()
+            counts = queryset.values('action').annotate(count=Count('id'))
+            data = {
+                'total': queryset.count(),
+                'approved': next((c['count'] for c in counts if c['action'] == 'approved'), 0),
+                'rejected': next((c['count'] for c in counts if c['action'] == 'rejected'), 0),
+                'under_review': next((c['count'] for c in counts if c['action'] == 'under_review'), 0),
+            }
+            return Response(data)
+        return super().list(request, *args, **kwargs)
+    
         
 class ViewsUpdateView(generics.UpdateAPIView):
     serializer_class = ViewsSerializer
@@ -394,12 +436,7 @@ class PublicationAnnotateView(generics.UpdateAPIView):
 #  PublicationStatsView – now returns full paginated monthly data
 #  and a list of users who paid both publication_fee + review_fee
 # --------------------------------------------------------------
-from django.db.models import Q, Sum, Count, Case, When, IntegerField, F, Value
-from django.db.models.functions import Coalesce, TruncMonth
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework import permissions
-from .pagination import DashboardResultsPagination
+
 
 class PublicationStatsView(APIView):
     permission_classes = [IsEditor]
