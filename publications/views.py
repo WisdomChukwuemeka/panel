@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.db import transaction
 import logging
 from accounts.models import User
+from django.db.models import DecimalField
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.db.models.functions import TruncMonth
@@ -28,8 +29,8 @@ class IsAuthorOrEditor(permissions.BasePermission):
 
 class IsEditor(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role == 'admin' or request.user.role == 'editor' 
-
+        return request.user and request.user.is_authenticated and (request.user.role == 'admin' or request.user.role == 'editor')
+    
 class PublicationListCreateView(generics.ListCreateAPIView):
     serializer_class = PublicationSerializer
     pagination_class = StandardResultsPagination
@@ -54,7 +55,9 @@ class PublicationListCreateView(generics.ListCreateAPIView):
             queryset = queryset.filter(
                 Q(title__icontains=search) |
                 Q(abstract__icontains=search) |
-                Q(author__full_name__icontains=search)
+                Q(doi__icontains=search) |
+                Q(author__full_name__icontains=search) |
+                Q(keywords__icontains=search)   
             )
         return queryset
 
@@ -120,15 +123,9 @@ class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
         user = self.request.user
         data = serializer.validated_data.copy()
 
-        # AUTHOR: Save as Draft
-        if user == instance.author:
-            data.pop('status', None)
-            data.pop('is_free_review', None)
-            serializer.save(**data)
-            return
-
-        # AUTHOR: Resubmit
-        if data.get('status') == 'pending' and user == instance.author:
+        # --- AUTHOR: Resubmit / Submit For Review (PENDING) ---
+        if user == instance.author and data.get('status') == 'pending':
+            
             if instance.status != 'rejected':
                 raise serializers.ValidationError("Only rejected publications can be resubmitted.")
 
@@ -140,20 +137,30 @@ class PublicationUpdateView(generics.RetrieveUpdateDestroyAPIView):
             ).exists()
 
             is_free = data.get('is_free_review', False)
+
             if not has_paid and not is_free:
                 raise serializers.ValidationError("Payment of ₦3,000 required.")
 
             if is_free:
                 sub = Subscription.objects.get(user=user)
                 if not sub.has_free_review_available():
-                    raise serializers.ValidationError("No free reviews.")
+                    raise serializers.ValidationError("No free reviews available.")
                 sub.free_reviews_used += 1
                 sub.save()
 
             serializer.save(status='pending', is_free_review=is_free)
             return
 
+        # --- AUTHOR: Save as draft ---
+        if user == instance.author:
+            # prevent overriding status or free-review
+            data.pop('status', None)
+            data.pop('is_free_review', None)
+            serializer.save(**data)
+            return
+
         raise serializers.ValidationError("Use /review/ endpoint.")
+
 
 # views.py
 class EditorReviewView(APIView):
@@ -381,27 +388,25 @@ class PublicationAnnotateView(generics.UpdateAPIView):
         else:
             serializer.save(editor_comments=comments)
         return instance
-    
-class StatsSerializer(serializers.Serializer):
-    total_publications = serializers.IntegerField()
-    approved = serializers.IntegerField()
-    rejected = serializers.IntegerField()
-    under_review = serializers.IntegerField()
-    draft = serializers.IntegerField()
-    total_likes = serializers.IntegerField()
-    total_dislikes = serializers.IntegerField()
-    monthly_data = serializers.DictField()
-    editors_actions = serializers.DictField()
-    total_payments = serializers.DecimalField(max_digits=12, decimal_places=2)
-    total_subscriptions = serializers.DecimalField(max_digits=12, decimal_places=2)
-    payment_details = serializers.DictField()
-    subscription_details = serializers.DictField()
+
+
+# --------------------------------------------------------------
+#  PublicationStatsView – now returns full paginated monthly data
+#  and a list of users who paid both publication_fee + review_fee
+# --------------------------------------------------------------
+from django.db.models import Q, Sum, Count, Case, When, IntegerField, F, Value
+from django.db.models.functions import Coalesce, TruncMonth
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import permissions
+from .pagination import DashboardResultsPagination
 
 class PublicationStatsView(APIView):
     permission_classes = [IsEditor]
     pagination_class = DashboardResultsPagination
 
     def get(self, request):
+        # ── 1. Summary Stats ───────────────────────────────────────
         total_publications = Publication.objects.count()
         approved = Publication.objects.filter(status='approved').count()
         rejected = Publication.objects.filter(status='rejected').count()
@@ -410,7 +415,8 @@ class PublicationStatsView(APIView):
         total_likes = Views.objects.filter(user_liked=True).count()
         total_dislikes = Views.objects.filter(user_disliked=True).count()
 
-        # Paginated monthly data
+
+        # ── 2. Monthly Data (Paginated) ───────────────────────────
         monthly_qs = Publication.objects.annotate(
             month=TruncMonth('created_at')
         ).values('month').annotate(
@@ -420,44 +426,191 @@ class PublicationStatsView(APIView):
             under_review=Count(Case(When(status='under_review', then=1), output_field=IntegerField())),
             draft=Count(Case(When(status='draft', then=1), output_field=IntegerField())),
         ).order_by('month')
+
         monthly_paginator = self.pagination_class()
         monthly_paginator.page_query_param = 'monthly_page'
         monthly_paginator.page_size_query_param = 'monthly_size'
         monthly_page = monthly_paginator.paginate_queryset(monthly_qs, request)
         monthly_paginated = monthly_paginator.get_paginated_response(monthly_page).data
 
-        # Paginated editors actions
-        editors_actions_qs = Publication.objects.exclude(editor=None).values('editor__full_name').annotate(
-            approved=Count(Case(When(status='approved', then=1), output_field=IntegerField())),
-            rejected=Count(Case(When(status='rejected', then=1), output_field=IntegerField())),
-        ).order_by('editor__full_name')
+        monthly_results = [
+            {
+                'month': item['month'].strftime('%Y-%m') if item['month'] else 'N/A',
+                'total': item['total'],
+                'approved': item['approved'],
+                'rejected': item['rejected'],
+                'under_review': item['under_review'],
+                'draft': item['draft'],
+            } for item in monthly_paginated['results']
+        ]
+
+        monthly_data = {
+            'count': monthly_paginated['count'],
+            'next': monthly_paginated['next'],
+            'previous': monthly_paginated['previous'],
+            'results': monthly_results
+        }
+
+        # ── 3. Editors Actions (Paginated) ─────────────────────────
+        editors_actions_qs = Publication.objects.exclude(editor=None)\
+            .values('editor__full_name')\
+            .annotate(
+                approved=Count(Case(When(status='approved', then=1), output_field=IntegerField())),
+                rejected=Count(Case(When(status='rejected', then=1), output_field=IntegerField())),
+            ).order_by('editor__full_name')
+
         editors_paginator = self.pagination_class()
         editors_paginator.page_query_param = 'editors_page'
         editors_paginator.page_size_query_param = 'editors_size'
         editors_page = editors_paginator.paginate_queryset(editors_actions_qs, request)
         editors_actions_paginated = editors_paginator.get_paginated_response(editors_page).data
+        editors_results = editors_actions_paginated['results']
 
-        total_payments = Payment.objects.filter(status='success', payment_type='publication_fee').aggregate(total=Sum('amount'))['total']
-        total_subscriptions = Payment.objects.filter(status='success', payment_type='review_fee').aggregate(total=Sum('amount'))['total'] 
+        # ── 4. Total Payments & Subscriptions ─────────────────────
+        total_pub_raw = Payment.objects.filter(
+            status='success',
+            payment_type='publication_fee'
+        ).aggregate(
+            total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2))
+        )['total']
 
-        # Paginated payment details
-        payment_details_qs = Payment.objects.filter(status='success').values('user__full_name', 'payment_type').annotate(
-            total_amount=Sum('amount'), count=Count('id')
-        ).order_by('user__full_name')
+        # Review Fee: ₦3,000 per review
+        total_rev_raw = Payment.objects.filter(
+            status='success',
+            payment_type='review_fee'
+        ).aggregate(
+            total=Coalesce(Sum('amount'), Value(0), output_field=DecimalField(max_digits=14, decimal_places=2))
+        )['total']
+
+        # Convert to float for frontend
+        total_payments = float(total_pub_raw)
+        total_subscriptions = float(total_rev_raw)
+
+        # ── 5. ALL PAYMENTS (SUCCESS + PENDING) – PAGINATED ───────
+        all_payments_qs = Payment.objects.filter(
+            payment_type__in=['publication_fee', 'review_fee']
+        ).select_related('user').order_by('-created_at')
+
+        search = request.query_params.get('search')
+        if search:
+            all_payments_qs = all_payments_qs.filter(
+                Q(user__full_name__icontains=search) |
+                Q(user__email__icontains=search)
+            )
+
+        payments_paginator = self.pagination_class()
+        payments_paginator.page_query_param = 'all_payments_page'
+        payments_paginator.page_size_query_param = 'all_payments_size'
+        payments_page = payments_paginator.paginate_queryset(all_payments_qs, request)
+        payments_paginated = payments_paginator.get_paginated_response(payments_page).data
+
+        all_payments_results = [
+            {
+                'id': p.id,
+                'user': p.user.full_name if p.user and hasattr(p.user, 'full_name') else "Unknown",
+                'type': p.get_payment_type_display() if hasattr(p, 'get_payment_type_display') else p.payment_type,
+                'amount': float(p.amount) if p.amount else 0.0,
+                'status': p.status or 'unknown',
+                'status_display': p.get_status_display() if hasattr(p, 'get_status_display') else (p.status or 'Unknown'),
+                'created_at': p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else 'N/A',
+            } for p in payments_page
+        ]
+
+        all_payments_data = {
+            'count': payments_paginated['count'],
+            'next': payments_paginated['next'],
+            'previous': payments_paginated['previous'],
+            'results': all_payments_results,
+        }
+
+        # DEBUG: Log actual counts
+        logger.info(
+            f"[STATS] Publication Fee: ₦{total_payments} "
+            f"({Payment.objects.filter(status='success', payment_type='publication_fee').count()} payments) | "
+            f"Review Fee: ₦{total_subscriptions} "
+            f"{all_payments_results}"
+            f"({Payment.objects.filter(status='success', payment_type='review_fee').count()} payments)"
+        )
+
+        # ── 5. Review Fee Payment Details (Paginated) ─────────────
+        payment_details_qs = Payment.objects.filter(
+            status='success', payment_type='review_fee'
+        ).values('user__full_name')\
+            .annotate(total_amount=Sum('amount'), count=Count('id'))\
+            .order_by('user__full_name')
+
         payments_paginator = self.pagination_class()
         payments_paginator.page_query_param = 'payments_page'
         payments_paginator.page_size_query_param = 'payments_size'
         payments_page = payments_paginator.paginate_queryset(payment_details_qs, request)
         payment_details_paginated = payments_paginator.get_paginated_response(payments_page).data
 
-        # Paginated subscription details
-        subscription_details_qs = Subscription.objects.values('user__full_name', 'free_reviews_used', 'free_reviews_granted').order_by('user__full_name')
+        payments_results = [
+            {
+                'user__full_name': item['user__full_name'],
+                'total_amount': float(item['total_amount']) if item['total_amount'] else 0.0,
+                'count': item['count'],
+            } for item in payment_details_paginated['results']
+        ]
+
+        # ── 6. Subscription Details (Paginated) ───────────────────
+        subscription_details_qs = Subscription.objects.values(
+            'user__full_name', 'free_reviews_used', 'free_reviews_granted'
+        ).order_by('user__full_name')
+
         subs_paginator = self.pagination_class()
         subs_paginator.page_query_param = 'subs_page'
         subs_paginator.page_size_query_param = 'subs_size'
         subs_page = subs_paginator.paginate_queryset(subscription_details_qs, request)
         subscription_details_paginated = subs_paginator.get_paginated_response(subs_page).data
+        subs_results = subscription_details_paginated['results']
 
+        # ── 7. NEW: Users Who Paid BOTH Fees (with Amounts) ────────
+        users_with_both_qs = User.objects.filter(
+            payment__payment_type='publication_fee',
+            payment__status='success'
+        ).annotate(
+            pub_fee=Coalesce(
+                Sum('payment__amount', filter=Q(payment__payment_type='publication_fee', payment__status='success')),
+                Value(0.0, output_field=DecimalField(max_digits=12, decimal_places=2))
+            )
+        ).filter(
+            payment__payment_type='review_fee',
+            payment__status='success'
+        ).annotate(
+            rev_fee=Coalesce(
+                Sum('payment__amount', filter=Q(payment__payment_type='review_fee', payment__status='success')),
+                Value(0.0, output_field=DecimalField(max_digits=12, decimal_places=2))
+            )
+        ).annotate(
+            total=F('pub_fee') + F('rev_fee')
+        ).values('id', 'full_name', 'pub_fee', 'rev_fee', 'total')\
+        .order_by('full_name')
+
+        users_paginator = self.pagination_class()
+        users_paginator.page_query_param = 'users_page'
+        users_paginator.page_size_query_param = 'users_size'
+        users_page = users_paginator.paginate_queryset(users_with_both_qs, request)
+        users_paginated = users_paginator.get_paginated_response(users_page).data
+
+        users_results = [
+            {
+                'id': u['id'],
+                'full_name': u['full_name'],
+                'publication_fee': float(u['pub_fee']),
+                'review_fee': float(u['rev_fee']),
+                'total': float(u['total']),
+            } for u in users_paginated['results']
+        ]
+
+        users_data = {
+            'count': users_paginated['count'],
+            'next': users_paginated['next'],
+            'previous': users_paginated['previous'],
+            'results': users_results,
+        }
+
+        # ── 8. Final Response ─────────────────────────────────────
         data = {
             'total_publications': total_publications,
             'approved': approved,
@@ -466,14 +619,16 @@ class PublicationStatsView(APIView):
             'draft': draft,
             'total_likes': total_likes,
             'total_dislikes': total_dislikes,
-            'monthly_data': monthly_paginated,
-            'editors_actions': editors_actions_paginated,
+
+            'monthly_data': monthly_data,  # Full paginated object
+            'editors_actions': editors_results,
             'total_payments': total_payments,
             'total_subscriptions': total_subscriptions,
-            'payment_details': payment_details_paginated,
-            'subscription_details': subscription_details_paginated,
+            'all_payments': all_payments_data,
+            'payment_details': payments_results,
+            'subscription_details': subs_results,
+
+            # NEW: Users with both fees + amounts
+            'users_with_both_fees': users_data,
         }
-        serializer = StatsSerializer(data=data)
-        if serializer.is_valid():
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(data)

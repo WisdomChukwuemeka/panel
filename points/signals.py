@@ -8,6 +8,7 @@ from django.utils import timezone
 def award_points_on_comment(sender, instance, created, **kwargs):
     if created and instance.author != instance.publication.author:
         today = timezone.now().date()
+        # One reward per day per commenter per publication
         if not PointReward.objects.filter(
             awarded_by=instance.author,
             publication=instance.publication,

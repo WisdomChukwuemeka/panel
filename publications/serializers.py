@@ -40,6 +40,7 @@ class PublicationSerializer(serializers.ModelSerializer):
         model = Publication
         fields = [
             "id",
+            "doi", 
             "title",
             "abstract",
             "content",
@@ -67,6 +68,7 @@ class PublicationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "author",
+            "doi", 
             "views",
             "created_at",
             "updated_at",
@@ -171,7 +173,9 @@ class PublicationSerializer(serializers.ModelSerializer):
             new_status = validated_data["status"]
             if request.user.role != "editor":
                 # Only allow rejected → pending transitions by author
-                if not (instance.status == "rejected" and new_status == "pending"):
+                if instance.status == "rejected" and new_status == "pending":
+                    instance.status = validated_data.pop("status")  # Set for authors
+                else:
                     validated_data.pop("status", None)
             else:
                 instance.status = validated_data.pop("status")
@@ -320,7 +324,7 @@ class StatsSerializer(serializers.Serializer):
     total_subscriptions = serializers.DecimalField(max_digits=12, decimal_places=2)
     payment_details = serializers.ListField(child=serializers.DictField())
     subscription_details = serializers.ListField(child=serializers.DictField())
-    
+
     
 # serializers.py (add this new serializer)
 class ReviewHistorySerializer(serializers.ModelSerializer):
@@ -333,3 +337,5 @@ class ReviewHistorySerializer(serializers.ModelSerializer):
         model = ReviewHistory
         fields = ['id', 'publication', 'publication_title', 'author_name', 'editor_name', 'action', 'note', 'timestamp', 'rejection_count']
         read_only_fields = fields
+        
+    

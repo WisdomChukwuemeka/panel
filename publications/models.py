@@ -38,6 +38,10 @@ class Category(models.Model):
 
     def __str__(self):
         return self.get_name_display()
+    
+def generate_doi():
+    # Simple example - you can later switch to CrossRef or a custom domain
+    return f"10.1234/{uuid.uuid4().hex[:8]}"
 
 def generate_short_id():
     return uuid.uuid4().hex[:12]
@@ -56,6 +60,15 @@ class Publication(models.Model):
         max_length=12,
         default=generate_short_id,
         editable=False,
+    )
+    
+    doi = models.CharField(
+    max_length=100,
+    unique=True,
+    blank=True,
+    null=True,
+    help_text="Digital Object Identifier for the publication",
+    default=generate_doi
     )
     
     title = models.CharField(max_length=255)

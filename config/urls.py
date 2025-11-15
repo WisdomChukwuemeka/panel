@@ -28,6 +28,7 @@ urlpatterns = [
     path('api/', include("comments.urls")),
     path('api/', include("messagebox.urls")),
     path('api/', include("points.urls")),
+    path('api/', include("rewardcode.urls")),
 ]
 
 if settings.DEBUG:
