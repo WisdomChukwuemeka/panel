@@ -1,5 +1,10 @@
 from django.urls import path
-from .views import PublicationListCreateView, PublicationAnnotateView, EditorActivitiesView, EditorReviewView, PublicationLikeView, PublicationDislikeView, FreeReviewStatusView, NotificationMarkAllReadView, PublicationUpdateView, PublicationDetailView, NotificationListView, NotificationMarkReadView, NotificationUnreadView, ViewsUpdateView, PublicationStatsView
+from .views import (PublicationListCreateView, PublicationAnnotateView, EditorActivitiesView, EditorReviewView, PublicationLikeView, 
+PublicationDislikeView, FreeReviewStatusView, 
+NotificationMarkAllReadView, PublicationUpdateView, 
+PublicationDetailView, NotificationListView, 
+NotificationMarkReadView, NotificationUnreadView, 
+ViewsUpdateView, PublicationStatsView, AuthorPublicationRankingView)
 
 
 urlpatterns = [
@@ -19,5 +24,6 @@ urlpatterns = [
     path('publications/<str:pk>/dislike/', PublicationDislikeView.as_view(), name='publication-dislike'),
     path('publications/<str:id>/annotate/', PublicationAnnotateView.as_view(), name='publication-annotate'),
     path('editor-activities/', EditorActivitiesView.as_view(), name='editor-activities'),
+    path('stats/authors-ranking/', AuthorPublicationRankingView.as_view(), name='authors-ranking'),
 ]
 

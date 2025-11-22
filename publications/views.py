@@ -58,7 +58,7 @@ class PublicationListCreateView(generics.ListCreateAPIView):
                 Q(abstract__icontains=search) |
                 Q(doi__icontains=search) |
                 Q(author__full_name__icontains=search) |
-                Q(keywords__icontains=search)   
+                Q(keywords__icontains=search)  
             )
         return queryset
 
@@ -231,14 +231,13 @@ class EditorReviewView(APIView):
         pub.save()  # This triggers your save() override too
 
         # THIS WILL NOW WORK
-        ReviewHistory.objects.update_or_create(
+        ReviewHistory.objects.create(
             publication=pub,
+            editor=request.user,
             action=review_action,
-            defaults={
-                "editor": request.user,
-                "note": note if action == "reject" else None
-            }
+            note=note if action == "reject" else None
         )
+
 
         # Notify author
         Notification.objects.create(
@@ -669,3 +668,58 @@ class PublicationStatsView(APIView):
             'users_with_both_fees': users_data,
         }
         return Response(data)
+    
+    
+class AuthorPublicationRankingView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = DashboardResultsPagination
+
+    def get(self, request, *args, **kwargs):
+        status_filter = request.query_params.get("status")  # optional
+        search = request.query_params.get("search")         # optional
+
+        # Base query: users who have published at least 1 publication
+        authors_qs = User.objects.annotate(
+        total_publications=Count('publications', filter=Q(publications__status='approved'))
+        ).order_by('-total_publications')
+
+
+        # Optional filter by publication status
+        if status_filter:
+            authors_qs = authors_qs.filter(publication__status=status_filter)
+
+        # Optional search (name, email)
+        if search:
+            authors_qs = authors_qs.filter(
+                Q(full_name__icontains=search) |
+                Q(email__icontains=search)
+            )
+
+        # Order by highest publication count
+        authors_qs = authors_qs.order_by('-total_publications', 'full_name')
+
+        # Paginate
+        page = self.paginate_queryset(authors_qs)
+        if page is not None:
+            results = [
+                {
+                    "author_id": author.id,
+                    "full_name": author.full_name,
+                    "email": author.email,
+                    "total_publications": author.total_publications,
+                }
+                for author in page
+            ]
+            return self.get_paginated_response(results)
+
+        # If pagination is off (rare)
+        results = [
+            {
+                "author_id": author.id,
+                "full_name": author.full_name,
+                "email": author.email,
+                "total_publications": author.total_publications,
+            }
+            for author in authors_qs
+        ]
+        return Response(results)

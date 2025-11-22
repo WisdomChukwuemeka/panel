@@ -1,9 +1,9 @@
 from django.apps import AppConfig
 
 
-class CommentsConfig(AppConfig):
+class TasksConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'comments'
+    name = 'tasks'
     
     def ready(self):
-        import comments.signals  # noqa
+        import tasks.signals

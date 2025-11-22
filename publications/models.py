@@ -138,21 +138,21 @@ class Publication(models.Model):
         # Save the instance first (so we have pk and updated fields)
         super().save(*args, **kwargs)
 
-        # === NEW: Log editor actions to ReviewHistory ===
-        if old_status and old_status != self.status and self.editor:
-            action_map = {
-                'under_review': 'under_review',
-                'approved': 'approved',
-                'rejected': 'rejected'
-            }
-            action = action_map.get(self.status)
-            if action:
-                ReviewHistory.objects.create(
-                    publication=self,
-                    editor=self.editor,
-                    action=action,
-                    note=self.rejection_note if self.status == 'rejected' else self.editor_comments
-                )
+        # # === NEW: Log editor actions to ReviewHistory ===
+        # if old_status and old_status != self.status and self.editor:
+        #     action_map = {
+        #         'under_review': 'under_review',
+        #         'approved': 'approved',
+        #         'rejected': 'rejected'
+        #     }
+        #     action = action_map.get(self.status)
+        #     if action:
+        #         ReviewHistory.objects.create(
+        #             publication=self,
+        #             editor=self.editor,
+        #             action=action,
+        #             note=self.rejection_note if self.status == 'rejected' else self.editor_comments
+        #         )
 
         # === Existing notification logic (keep this too!) ===
         if is_new:
