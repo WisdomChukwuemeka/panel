@@ -18,6 +18,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from accounts.authentication import CookieJWTAuthentication
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 # -----------------------
 # User List & Create
@@ -214,17 +215,28 @@ class CookieTokenRefreshView(TokenRefreshView):
         if not refresh_token:
             return Response({"detail": "No refresh token"}, status=401)
 
-        # Put refresh token in request data so parent view can read it
-        mutable_data = request.data.copy()
-        mutable_data["refresh"] = refresh_token
-        request.data.update(mutable_data)
+        # Inject refresh token into request.data for SimpleJWT
+        data = request.data.copy()
+        data["refresh"] = refresh_token
+        request.data.update(data)
 
-        response = super().post(request, *args, **kwargs)
+        try:
+            # Call SimpleJWT's refresh handler
+            response = super().post(request, *args, **kwargs)
+        except (InvalidToken, TokenError):
+            # ❗ CRITICAL FIX: Tell frontend refresh token is expired
+            return Response({"detail": "Refresh token expired"}, status=401)
 
+        # If refresh succeeded
         if response.status_code == 200:
-            access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-            refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+            access_lifetime = int(
+                settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
+            )
+            refresh_lifetime = int(
+                settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()
+            )
 
+            # Update access token cookie
             response.set_cookie(
                 key="access_token",
                 value=response.data["access"],
@@ -236,7 +248,8 @@ class CookieTokenRefreshView(TokenRefreshView):
                 path="/",
             )
 
-            if "refresh" in response.data:  # only if rotation enabled
+            # Update refresh token (only if rotation enabled)
+            if "refresh" in response.data:
                 response.set_cookie(
                     key="refresh_token",
                     value=response.data["refresh"],
@@ -275,6 +288,7 @@ class MeView(APIView):
     def get(self, request):
         return Response({
             "id": request.user.id,
+            "full_name": request.user.full_name,
             "email": request.user.email,
             "role": request.user.role,
             "is_active": request.user.is_active,

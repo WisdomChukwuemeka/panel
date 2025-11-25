@@ -154,39 +154,7 @@ class Publication(models.Model):
         #             note=self.rejection_note if self.status == 'rejected' else self.editor_comments
         #         )
 
-        # === Existing notification logic (keep this too!) ===
-        if is_new:
-            # Notify editors for new submission
-            editors = User.objects.filter(role='editor')
-            if editors.exists():
-                for editor in editors:
-                    Notification.objects.create(
-                        user=editor,
-                        message=f"New publication '{self.title}' submitted for review by {self.author.full_name} at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}.",
-                        related_publication=self
-                    )
-            else:
-                Notification.objects.create(
-                    user=self.author,
-                    message=f"No editors available to review your publication '{self.title}' submitted at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}. Please contact an administrator.",
-                    related_publication=self
-                )
-        elif old_status != self.status:
-            # Notify author of status change
-            Notification.objects.create(
-                user=self.author,
-                message=f"Your publication '{self.title}' status changed to '{self.get_status_display()}' at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}.",
-                related_publication=self
-            )
-            # Notify editors of status change (if not already approved)
-            if self.status != 'approved':
-                editors = User.objects.filter(role='editor')
-                for editor in editors:
-                    Notification.objects.create(
-                        user=editor,
-                        message=f"Publication '{self.title}' status updated to '{self.get_status_display()}' at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}.",
-                        related_publication=self
-                    )    
+
                     
     def total_likes(self):
         return self.view_stats.filter(user_liked=True).count()
@@ -237,5 +205,4 @@ class Views(models.Model):
         unique_together = ('publication', 'user')
 
     def __str__(self):
-        return f"{self.user} - {self.publication.title}"
-    
+        return f"{self.user} - {self.publication.title}"   

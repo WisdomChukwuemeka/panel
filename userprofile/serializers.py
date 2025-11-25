@@ -6,7 +6,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         # include every field in the model
-        fields = ['id', 'bio', 'institution', 'affiliation', 'profile_image', 'date_joined']
+        fields = ['id', 'name', 'bio', 'institution', 'affiliation', 'profile_image', 'date_joined']
         read_only_fields = ['id', 'date_joined']   # date_joined set automatically
         
     def validate_profile_image(self, value):

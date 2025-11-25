@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/', include("rewardcode.urls")),
     path('api/', include("tasks.urls")),
     path('api/', include("emoji.urls")),
+    path('api/', include("conference.urls")),
 ]
 
 if settings.DEBUG:

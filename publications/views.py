@@ -222,11 +222,22 @@ class EditorReviewView(APIView):
             pub.rejection_count += 1
             pub.rejection_note = note
         elif action == 'approve':
+            has_pub_fee = Payment.objects.filter(
+                user=pub.author,
+                payment_type='publication_fee',
+                metadata__publication_id=str(pub.id),
+                status='success'
+            ).exists()
+
+            if not has_pub_fee:
+                return Response(
+                    {"detail": "Cannot approve this publication. Publication fee has not been paid."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             pub.status = 'approved'
             pub.publication_date = timezone.now()
-        else:  # under_review
+        elif action == 'under_review':
             pub.status = 'under_review'
-
         pub.editor = request.user
         pub.save()  # This triggers your save() override too
 
@@ -238,13 +249,6 @@ class EditorReviewView(APIView):
             note=note if action == "reject" else None
         )
 
-
-        # Notify author
-        Notification.objects.create(
-            user=pub.author,
-            message=f"Your publication '{pub.title}' has been {pub.get_status_display().lower()}.",
-            related_publication=pub
-        )
 
         return Response({
             "detail": "Success",
@@ -723,3 +727,5 @@ class AuthorPublicationRankingView(generics.ListAPIView):
             for author in authors_qs
         ]
         return Response(results)
+    
+   
