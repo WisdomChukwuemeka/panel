@@ -666,7 +666,7 @@ SESSION_COOKIE_SAMESITE = "None"
 CSRF_COOKIE_SAMESITE = "None"
 SESSION_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
 CSRF_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
-
+FRONTEND_DOMAIN = os.getenv("FRONTEND_DOMAIN", "scholar-panel.vercel.app")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 X_FRAME_OPTIONS = "DENY"
