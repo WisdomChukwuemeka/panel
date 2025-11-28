@@ -634,14 +634,14 @@ MIDDLEWARE = [
 ]
 
 ALLOWED_HOSTS = [
-    "panel-ayrn.onrender.com",
+    "panel-1-tlqv.onrender.com",
     "scholar-panel.vercel.app",
     "localhost",
     "127.0.0.1",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    "https://panel-ayrn.onrender.com",
+    "https://panel-1-tlqv.onrender.com",
     "https://scholar-panel.vercel.app",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -653,6 +653,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3001",
 ]
+
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + ["Cookie"]
