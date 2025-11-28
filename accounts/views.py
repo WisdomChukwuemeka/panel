@@ -20,6 +20,12 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
+
+
+secure = not settings.DEBUG  # True in prod, False in dev
+samesite = "None" if not settings.DEBUG else "Lax"
+domain = ".scholar-panel.vercel.app" if not settings.DEBUG else None
+
 # -----------------------
 # User List & Create
 # -----------------------
@@ -55,11 +61,10 @@ class UserListCreateView(generics.ListCreateAPIView):
             value=str(refresh.access_token),
             max_age=access_lifetime,
             httponly=True,
-            # secure=not settings.DEBUG,
-            secure=True,
-            samesite="None",
+            secure=secure,
+            samesite=samesite,
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=domain,
         )
         response.set_cookie(
             key="refresh_token",
@@ -68,10 +73,10 @@ class UserListCreateView(generics.ListCreateAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             # samesite="None",
-            secure=True,
-            samesite="None",
+            secure=secure,
+            samesite=samesite,
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=domain,
         )
 
         return response
@@ -135,10 +140,10 @@ class LoginView(generics.GenericAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             # samesite="Lax",
-            secure=True,  
-            samesite="None",   
+            secure=secure,
+            samesite=samesite,
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=domain,
         )
         response.set_cookie(
             key="refresh_token",
@@ -147,10 +152,10 @@ class LoginView(generics.GenericAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             # samesite="Lax",
-            secure=True,    
-            samesite="None",   
+            secure=secure,
+            samesite=samesite,
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=domain,
         )
 
         return response  # Now correct
@@ -252,10 +257,10 @@ class CookieTokenRefreshView(TokenRefreshView):
                 httponly=True,
                 # secure=not settings.DEBUG,
                 # samesite="None",
-                secure=True,
-                samesite="None",
+                secure=secure,
+                samesite=samesite,
                 path="/",
-                domain=".scholar-panel.vercel.app"
+                domain=domain,
             )
 
             # Update refresh token (only if rotation enabled)
@@ -268,10 +273,10 @@ class CookieTokenRefreshView(TokenRefreshView):
                     httponly=True,
                     # secure=not settings.DEBUG,
                     # samesite="Lax",
-                    secure=True,
-                    samesite="None",
+                    secure=secure,
+                    samesite=samesite,
                     path="/",
-                    domain=".scholar-panel.vercel.app",
+                    domain=domain,
                 )
 
             response.data = {"detail": "Token refreshed"}
