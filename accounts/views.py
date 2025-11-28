@@ -20,8 +20,6 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
-
-
 # -----------------------
 # User List & Create
 # -----------------------
@@ -61,7 +59,7 @@ class UserListCreateView(generics.ListCreateAPIView):
             secure=True,
             samesite="None",
             path="/",
-            domain=".scholar-panel.vercel.app"
+            # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -73,7 +71,7 @@ class UserListCreateView(generics.ListCreateAPIView):
             secure=True,
             samesite="None",
             path="/",
-            domain=".scholar-panel.vercel.app"
+            # domain=".scholar-panel.vercel.app"
         )
 
         return response
@@ -140,7 +138,7 @@ class LoginView(generics.GenericAPIView):
             secure=True,  
             samesite="None",   
             path="/",
-            domain=".scholar-panel.vercel.app"
+            # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -152,7 +150,7 @@ class LoginView(generics.GenericAPIView):
             secure=True,    
             samesite="None",   
             path="/",
-            domain=".scholar-panel.vercel.app"
+            # domain=".scholar-panel.vercel.app"
         )
 
         return response  # Now correct
