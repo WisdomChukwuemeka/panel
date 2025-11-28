@@ -13,8 +13,8 @@ if RENDER_EXTERNAL_HOSTNAME:
     CSRF_TRUSTED_ORIGINS.append('https://' + RENDER_EXTERNAL_HOSTNAME)
 else:
     # Fallback for development / debugging
-    ALLOWED_HOSTS += ['localhost', '127.0.0.1', 'panel-ayrn.onrender.com', 'scholar-panel.vercel.app']
-    CSRF_TRUSTED_ORIGINS += ['https://panel-ayrn.onrender.com', 'https://scholar-panel.vercel.app']
+    ALLOWED_HOSTS += ['localhost', '127.0.0.1', "https://panel-1-tlqv.onrender.com", 'scholar-panel.vercel.app']
+    CSRF_TRUSTED_ORIGINS += ["https://panel-1-tlqv.onrender.com", 'https://scholar-panel.vercel.app']
 
 
 
