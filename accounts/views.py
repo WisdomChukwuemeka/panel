@@ -56,7 +56,8 @@ class UserListCreateView(generics.ListCreateAPIView):
             max_age=access_lifetime,
             httponly=True,
             secure=not settings.DEBUG,
-            samesite="None",
+            # samesite="None",
+            samesite="Lax",
             path="/",
         )
         response.set_cookie(
@@ -67,7 +68,7 @@ class UserListCreateView(generics.ListCreateAPIView):
             # secure=not settings.DEBUG,
             # samesite="None",
             secure=True,
-            samesite="None",
+            samesite="Lax",
             path="/",
         )
 
@@ -131,7 +132,7 @@ class LoginView(generics.GenericAPIView):
             max_age=access_lifetime,
             httponly=True,
             # secure=not settings.DEBUG,
-            # samesite="Lax",
+            samesite="Lax",
             secure=True,  
             samesite="None",   
             path="/",
@@ -142,7 +143,7 @@ class LoginView(generics.GenericAPIView):
             max_age=refresh_lifetime,
             httponly=True,
             # secure=not settings.DEBUG,
-            # samesite="Lax",
+            samesite="Lax",
             secure=True,    
             samesite="None",   
             path="/",
@@ -248,7 +249,7 @@ class CookieTokenRefreshView(TokenRefreshView):
                 # secure=not settings.DEBUG,
                 # samesite="None",
                 secure=True,
-                samesite="None",
+                samesite="Lax",
                 path="/",
             )
 
@@ -261,7 +262,7 @@ class CookieTokenRefreshView(TokenRefreshView):
                     expires=refresh_lifetime,
                     httponly=True,
                     # secure=not settings.DEBUG,
-                    # samesite="Lax",
+                    samesite="Lax",
                     secure=True,
                     samesite="None",
                     path="/",
