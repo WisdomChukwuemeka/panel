@@ -57,8 +57,8 @@ class UserListCreateView(generics.ListCreateAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             secure=True,
-            samesite="None",
-            domain="scholar-panel.vercel.app",
+            samesite="Lax",
+            path="/",  
         )
         response.set_cookie(
             key="refresh_token",
@@ -68,8 +68,8 @@ class UserListCreateView(generics.ListCreateAPIView):
             # secure=not settings.DEBUG,
             # samesite="None",
             secure=True,
-            samesite="None",
-            domain="scholar-panel.vercel.app",
+            samesite="Lax",
+            path="/",  
         )
 
         return response
@@ -134,19 +134,19 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             # samesite="Lax",
             secure=True,  
-            samesite="None",   
-           domain="scholar-panel.vercel.app",
+            samesite="Lax",   
+            path="/",  
         )
         response.set_cookie(
             key="refresh_token",
             value=str(refresh),
             max_age=refresh_lifetime,
             httponly=True,
-            # secure=not settings.DEBUG,
-            # samesite="Lax",
-            secure=True,    
-            samesite="None",   
-            domain="scholar-panel.vercel.app",
+            # # secure=not settings.DEBUG,  
+            # # samesite="None",   
+            secure=True,
+            samesite="Lax",
+            path="/",      
         )
 
         return response  # Now correct
@@ -227,30 +227,25 @@ class CookieTokenRefreshView(TokenRefreshView):
             # Call SimpleJWT's refresh handler
             response = super().post(request, *args, **kwargs)
         except (InvalidToken, TokenError):
-            # ❗ CRITICAL FIX: Tell frontend refresh token is expired
+            # CRITICAL: Tell frontend refresh token is expired
             return Response({"detail": "Refresh token expired"}, status=401)
 
         # If refresh succeeded
         if response.status_code == 200:
-            access_lifetime = int(
-                settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds()
-            )
-            refresh_lifetime = int(
-                settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()
-            )
+            access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+            refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
             # Update access token cookie
             response.set_cookie(
                 key="access_token",
                 value=response.data["access"],
                 max_age=access_lifetime,
-                expires=access_lifetime,
+                expires=access_lifetime,  # Optional but good for consistency
                 httponly=True,
-                # secure=not settings.DEBUG,
-                # samesite="None",
                 secure=True,
-                samesite="None",
-                domain="scholar-panel.vercel.app",
+                samesite="Lax",  # ← FIXED: Lax (safer with Vercel proxy)
+                path="/",
+                # ← NO DOMAIN! Let browser default to vercel.app
             )
 
             # Update refresh token (only if rotation enabled)
@@ -261,17 +256,17 @@ class CookieTokenRefreshView(TokenRefreshView):
                     max_age=refresh_lifetime,
                     expires=refresh_lifetime,
                     httponly=True,
-                    # secure=not settings.DEBUG,
-                    # samesite="Lax",
                     secure=True,
-                    samesite="None",
-                    domain="scholar-panel.vercel.app",
+                    samesite="Lax",  # ← FIXED: Lax
+                    path="/",
+                    # ← NO DOMAIN!
                 )
 
             response.data = {"detail": "Token refreshed"}
 
         return response
     
+        
 # accounts/views.py
 class LogoutView(APIView):
     def post(self, request):
