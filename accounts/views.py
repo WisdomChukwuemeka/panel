@@ -55,11 +55,9 @@ class UserListCreateView(generics.ListCreateAPIView):
             value=str(refresh.access_token),
             max_age=access_lifetime,
             httponly=True,
-            # secure=not settings.DEBUG,
+            secure=not settings.DEBUG,
             samesite="None",
             path="/",
-            partitioned=True,
-            # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -71,8 +69,6 @@ class UserListCreateView(generics.ListCreateAPIView):
             secure=True,
             samesite="None",
             path="/",
-            partitioned=True,
-            # domain=".scholar-panel.vercel.app"
         )
 
         return response
@@ -139,8 +135,6 @@ class LoginView(generics.GenericAPIView):
             secure=True,  
             samesite="None",   
             path="/",
-            partitioned=True,
-            # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -152,8 +146,6 @@ class LoginView(generics.GenericAPIView):
             secure=True,    
             samesite="None",   
             path="/",
-            partitioned=True,
-            # domain=".scholar-panel.vercel.app"
         )
 
         return response  # Now correct
@@ -258,8 +250,6 @@ class CookieTokenRefreshView(TokenRefreshView):
                 secure=True,
                 samesite="None",
                 path="/",
-                partitioned=True,
-                # domain=".scholar-panel.vercel.app"
             )
 
             # Update refresh token (only if rotation enabled)
@@ -275,8 +265,6 @@ class CookieTokenRefreshView(TokenRefreshView):
                     secure=True,
                     samesite="None",
                     path="/",
-                    partitioned=True,
-                    # domain=".scholar-panel.vercel.app",
                 )
 
             response.data = {"detail": "Token refreshed"}
