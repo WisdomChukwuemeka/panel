@@ -61,7 +61,7 @@ class UserListCreateView(generics.ListCreateAPIView):
             secure=True,
             samesite="None",
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -73,7 +73,7 @@ class UserListCreateView(generics.ListCreateAPIView):
             secure=True,
             samesite="None",
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=".scholar-panel.vercel.app"
         )
 
         return response
@@ -140,7 +140,7 @@ class LoginView(generics.GenericAPIView):
             secure=True,  
             samesite="None",   
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -152,7 +152,7 @@ class LoginView(generics.GenericAPIView):
             secure=True,    
             samesite="None",   
             path="/",
-            # domain=".scholar-panel.vercel.app"
+            domain=".scholar-panel.vercel.app"
         )
 
         return response  # Now correct
