@@ -60,6 +60,23 @@ class TaskSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Multiple matches: {names}. Use email.")
 
         return candidates.first()
+    
+    
+    def validate(self, attrs):
+        user = attrs.get("assigned_to")
+        title = attrs.get("title")
+
+        if Task.objects.filter(
+            assigned_to=user,
+            title=title,
+            status__in=['pending', 'in_progress']
+        ).exists():
+            raise serializers.ValidationError(
+                "This editor already has an active task with this title."
+            )
+
+        return attrs
+
 
     def create(self, validated_data):
         editor = validated_data.pop('assignee')

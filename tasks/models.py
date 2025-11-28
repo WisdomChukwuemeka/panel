@@ -1,11 +1,8 @@
 # tasks/models.py
 from django.db import models
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 from publications.models import Notification
-from accounts.models import User
-
-User = get_user_model()
+from accounts.models import User  # Adjust import based on your project structure
 
 
 class Task(models.Model):
@@ -128,3 +125,19 @@ class Task(models.Model):
             'completed': 'green',
             'rejected': 'red',
         }.get(self.status, 'gray')
+        
+        
+    def save(self, *args, **kwargs):
+        if self.pk is None:  # only on create
+            base_title = self.title
+            counter = 1
+
+            while Task.objects.filter(
+                title=self.title,
+                assigned_to=self.assigned_to,
+                status__in=['pending', 'in_progress']
+            ).exists():
+                self.title = f"{base_title} ({counter})"
+                counter += 1
+
+        super().save(*args, **kwargs)

@@ -4,6 +4,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from django.db.models import Q
 from django.contrib.auth import get_user_model
+from rest_framework import status
+
 
 from .models import Task
 from .serializers import TaskSerializer, TaskReplySerializer, TaskInProgressSerializer
@@ -15,8 +17,10 @@ User = get_user_model()
 class IsAdminOrTaskAssigner(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and (
-            request.user.is_staff or request.user.has_perm('tasks.can_assign_task')
+            request.user.role == 'admin' or
+            request.user.has_perm('tasks.can_assign_task')
         )
+
 
 
 class IsTaskOwner(permissions.BasePermission):
@@ -28,13 +32,19 @@ class IsTaskOwner(permissions.BasePermission):
     
     
 def get_task_queryset(request):
-    if request.user.is_staff:
-        if request.user.role == 'editor':
-            return Task.objects.filter(assigned_to=request.user).order_by('-created_at')  # Add this
-        else:
-            return Task.objects.all().order_by('-id')  # Add this
-    else:
-        return Task.objects.none()
+    user = request.user
+
+    # Admin → see ALL tasks
+    if user.role == 'admin' or user.is_staff:
+        return Task.objects.all().order_by('-created_at')
+
+    # Editor → see ONLY their assigned tasks
+    if user.role == 'editor':
+        return Task.objects.filter(assigned_to=user).order_by('-created_at')
+
+    # Nobody else → nothing
+    return Task.objects.none()
+
 
 
 # Editor Search (Admin only)
@@ -72,8 +82,11 @@ class TaskListCreateView(generics.ListCreateAPIView):
     pagination_class = TaskPagination
 
     def get_queryset(self):
-        return get_task_queryset(self.request).select_related('assigned_by', 'assigned_to')
-    
+        user = self.request.user
+        if user.role == 'admin' or user.is_staff:
+            return Task.objects.all().select_related('assigned_by', 'assigned_to').order_by('-created_at')
+        # Editor → only their tasks
+        return Task.objects.filter(assigned_to=user).select_related('assigned_by', 'assigned_to').order_by('-created_at')
     # def perform_create(self, serializer):
     #     serializer.save(assigned_by=self.request.user)
 
@@ -85,7 +98,10 @@ class TaskDetailView(generics.RetrieveAPIView):
     lookup_field = 'pk'
 
     def get_queryset(self):
-        return get_task_queryset(self.request)
+        user = self.request.user
+        if user.role == 'admin' or user.is_staff:
+            return Task.objects.all()
+        return Task.objects.filter(assigned_to=user)
 
 # Reply & Complete
 class TaskReplyView(generics.UpdateAPIView):
@@ -94,10 +110,34 @@ class TaskReplyView(generics.UpdateAPIView):
     lookup_field = 'pk'
 
     def get_queryset(self):
-        if self.request.user.is_staff or self.request.user.has_perm('tasks.can_assign_task'):
+        # Only assigned tasks for editors
+        user = self.request.user
+        if user.role == 'admin' or user.is_staff:
             return Task.objects.all()
-        return Task.objects.filter(assigned_to=self.request.user)
+        return Task.objects.filter(assigned_to=user)
+    
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial, context={'request': request})
+        
+        try:
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response({"detail": "Task completed successfully"}, status=status.HTTP_200_OK)
+        
+        except ValueError as e:
+            # Task already completed/rejected
+            return Response({"reply_message": [str(e)]}, status=status.HTTP_400_BAD_REQUEST)
 
+        except PermissionError as e:
+            # Only assigned editor can complete task
+            return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+        except Exception as e:
+            # Catch-all
+            return Response({"detail": "Task not assigned to you, try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
 
 # Mark as In Progress
 class TaskInProgressView(generics.UpdateAPIView):
@@ -106,6 +146,7 @@ class TaskInProgressView(generics.UpdateAPIView):
     lookup_field = 'pk'
 
     def get_queryset(self):
-        if self.request.user.is_staff or self.request.user.has_perm('tasks.can_assign_task'):
+        user = self.request.user
+        if user.role == 'admin' or user.is_staff:
             return Task.objects.all()
-        return Task.objects.filter(assigned_to=self.request.user)
+        return Task.objects.filter(assigned_to=user)

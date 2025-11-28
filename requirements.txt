@@ -14,6 +14,7 @@ Django==5.2
 django-channels==0.7.0
 django-cloudinary-storage==0.3.0
 django-cors-headers==4.7.0
+django-taggit==6.1.0
 djangorestframework==3.16.0
 djangorestframework_simplejwt==5.5.0
 docopt==0.6.2

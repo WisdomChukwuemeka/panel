@@ -44,21 +44,21 @@ def handle_publication_notifications(sender, instance, created, **kwargs):
         # To make it work properly, we'll add a pre_save signal below to store old_status.
         if hasattr(publication, '_old_status') and publication._old_status != publication.status:
             old_status = publication._old_status
-            # Notify author of status change
+            # Notify author
             Notification.objects.create(
                 user=publication.author,
                 message=f"Your publication '{publication.title}' status changed to '{publication.get_status_display()}' at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}.",
                 related_publication=publication
             )
-            # Notify editors of status change (if not already approved)
-            if publication.status != 'approved':
-                editors = User.objects.filter(role='editor')
-                for editor in editors:
-                    Notification.objects.create(
-                        user=editor,
-                        message=f"Publication '{publication.title}' status updated to '{publication.get_status_display()}' at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}.",
-                        related_publication=publication
-                    )
+            # Notify editors
+            editors = User.objects.filter(role='editor')
+            for editor in editors:
+                Notification.objects.create(
+                    user=editor,
+                    message=f"Publication '{publication.title}' status updated to '{publication.get_status_display()}' at {timezone.now().strftime('%I:%M %p WAT, %B %d, %Y')}.",
+                    related_publication=publication
+                )
+
 
 from django.db.models.signals import pre_save
 

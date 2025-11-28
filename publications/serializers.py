@@ -3,7 +3,8 @@ from .models import Publication, ReviewHistory, Category, Views, Notification
 from payments.models import Subscription, Payment
 import logging
 from django.core.files.uploadedfile import InMemoryUploadedFile, TemporaryUploadedFile
-
+from accounts.models import User
+from django.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,11 @@ class PublicationSerializer(serializers.ModelSerializer):
     rejection_count = serializers.IntegerField(read_only=True)
     has_paid = serializers.SerializerMethodField()
     annotated_file = serializers.FileField(required=False, allow_null=True)
-    
+    cover_image = serializers.ImageField(required=False, allow_null=True)
+    co_authors_input = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
+    co_authors = serializers.SerializerMethodField(read_only=True)
+    volume = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
     class Meta:
         model = Publication
         fields = [
@@ -45,6 +50,9 @@ class PublicationSerializer(serializers.ModelSerializer):
             "abstract",
             "content",
             "file",
+            "cover_image",
+            "co_authors",
+            "co_authors_input",
             "has_paid",
             "video_file",
             "author",
@@ -65,6 +73,7 @@ class PublicationSerializer(serializers.ModelSerializer):
             "rejection_count",
             'annotated_file', 
             'editor_comments',
+            "volume",
         ]
         read_only_fields = [
             "author",
@@ -121,13 +130,30 @@ class PublicationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         logger.info(f"Creating publication with validated_data: {validated_data}")
+
         category_name = validated_data.pop("category_name", None)
+        co_author_names = validated_data.pop("co_authors_input", [])
+
+        # Create the publication once
         publication = Publication.objects.create(**validated_data)
+
+        # Save list of names directly
+        publication.co_author_names = co_author_names
+
+        # Assign category
         if category_name:
             category_obj, _ = Category.objects.get_or_create(name=category_name)
             publication.category = category_obj
-            publication.save()
+
+        # Add co-authors by name
+        for name in co_author_names:
+            user = User.objects.filter(full_name=name).first()
+            if user:
+                publication.co_authors.add(user)
+
+        publication.save()
         return publication
+
     
     def validate(self, attrs):
         instance = self.instance
@@ -162,54 +188,108 @@ class PublicationSerializer(serializers.ModelSerializer):
 
         # Check user permissions for status updates (assuming is_editor check)
         request = self.context.get('request')
+        old_status = instance.status
+
         # Prevent non-editors from changing status
-        # Instead of removing all status changes for non-editors:
         if request.user.role != "editor":
             if validated_data.get("status") not in ["pending", "under_review"]:
                 validated_data.pop("status", None)
-
 
         if "status" in validated_data:
             new_status = validated_data["status"]
             if request.user.role != "editor":
                 # Only allow rejected → pending transitions by author
                 if instance.status == "rejected" and new_status == "pending":
-                    instance.status = validated_data.pop("status")  # Set for authors
+                    instance.status = validated_data.pop("status")
                 else:
                     validated_data.pop("status", None)
             else:
                 instance.status = validated_data.pop("status")
 
         # Editable fields for authors
-        editable_fields = ["title", "abstract", "content", "file", "video_file", "keywords", "is_free_review", "rejection_note"]
+        editable_fields = [
+            "title", "abstract", "content", "file", "video_file",
+            "keywords", "is_free_review", "rejection_note", "volume" 
+        ]
+
         for field in editable_fields:
             if field in validated_data:
                 value = validated_data.get(field)
                 if field in ["file", "video_file"]:
-                    value = validated_data.get(field)
                     if value in [None, "", "null", "undefined"]:
                         if getattr(instance, field):
                             getattr(instance, field).delete(save=False)
                         setattr(instance, field, None)
                     elif isinstance(value, (InMemoryUploadedFile, TemporaryUploadedFile)):
-                        # Let Cloudinary handle it automatically
                         setattr(instance, field, value)
                 else:
-                    if value is not None:  # Skip None for non-file fields
+                    if value is not None:
                         setattr(instance, field, value)
-                        
 
         # Handle category if provided
         if category_name is not None:
             category_obj, _ = Category.objects.get_or_create(name=category_name)
             instance.category = category_obj
-            
+
         instance.editor_comments = validated_data.get('editor_comments', instance.editor_comments)
+
         if 'annotated_file' in validated_data:
             instance.annotated_file = validated_data['annotated_file']
 
+        # ------------------------------
+        # Handle cover image (FIXED)
+        # ------------------------------
+        if 'cover_image' in validated_data:
+            value = validated_data.get('cover_image')
+
+            if value in [None, "", "null", "undefined"]:
+                if instance.cover_image:
+                    instance.cover_image.delete(save=False)
+                instance.cover_image = None
+            else:
+                instance.cover_image = value
+
+        # ------------------------------
+        # Handle co-authors (MOVED OUT)
+        # ------------------------------
+       # Handle co-authors: save list of names directly
+        co_author_names = validated_data.pop("co_authors_input", None)
+        if co_author_names is not None:
+            instance.co_author_names = co_author_names
+
         instance.save()
+        
+         # >>> ADDED FOR NOTIFICATIONS + HISTORY
+        new_status = instance.status
+
+        if old_status != new_status:
+            msg_map = {
+                "approved": f"Your publication '{instance.title}' has been approved.",
+                "rejected": f"Your publication '{instance.title}' has been rejected.",
+                "under_review": f"Your publication '{instance.title}' is now under review.",
+                "pending": f"Your publication '{instance.title}' has been resubmitted.",
+            }
+
+            # Save notification
+            if new_status in msg_map:
+                Notification.objects.create(
+                    user=instance.author,
+                    message=msg_map[new_status],
+                    type="publication",
+                    related_publication=instance
+                )
+
+            # Save editor action history
+            if request.user.role == "editor":
+                ReviewHistory.objects.create(
+                    publication=instance,
+                    editor=request.user,
+                    action=new_status,
+                    note=validated_data.get("rejection_note", "")
+                )
+                
         return instance
+    
 
     def get_has_paid(self, obj):
         user = self.context['request'].user
@@ -223,8 +303,8 @@ class PublicationSerializer(serializers.ModelSerializer):
     def get_category_labels(self, obj):
         return obj.category.get_name_display() if obj.category else None
 
-    def get_author(self, obj):
-        return obj.author.full_name
+    def get_co_authors(self, obj):
+        return [user.full_name for user in obj.co_authors.all()]
 
     def get_editor(self, obj):
         return obj.editor.full_name if obj.editor else None
@@ -235,7 +315,21 @@ class PublicationSerializer(serializers.ModelSerializer):
         if len(value) < 10:
             raise serializers.ValidationError("Title must be at least 10 characters long.")
         return value
+    
+    def validate_volume(self, value):
+        if value and len(value) > 50:
+            raise serializers.ValidationError("Volume cannot exceed 50 characters.")
+        return value
 
+    
+    def get_cover_image(self, obj):
+        if obj.cover_image:
+            return obj.cover_image.url
+        return None
+
+    def get_co_authors(self, obj):
+        return obj.co_author_names
+    
     def validate_abstract(self, value):
         if not value.strip():
             raise serializers.ValidationError("Abstract cannot be empty or just whitespace.")
@@ -285,6 +379,10 @@ class PublicationSerializer(serializers.ModelSerializer):
             return obj.annotated_file.url
         return None
     
+    def get_author(self, obj):
+        # Return the author's full name or username
+        return obj.author.full_name if obj.author else None
+    
 
 class NotificationSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField(read_only=True)
@@ -304,6 +402,9 @@ class NotificationSerializer(serializers.ModelSerializer):
         if len(value) > 1000:
             raise serializers.ValidationError("Message cannot exceed 1000 characters.")
         return value
+    
+    def get_related_publication(self, obj):
+        return obj.related_publication.id if obj.related_publication else None
 
     def update(self, instance, validated_data):
         instance.is_read = validated_data.get('is_read', instance.is_read)
