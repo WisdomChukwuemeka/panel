@@ -134,7 +134,7 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             samesite="Lax",
             secure=True,  
-            samesite="None",   
+            # samesite="None",   
             path="/",
         )
         response.set_cookie(
@@ -145,7 +145,7 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             samesite="Lax",
             secure=True,    
-            samesite="None",   
+            # samesite="None",   
             path="/",
         )
 
@@ -264,7 +264,7 @@ class CookieTokenRefreshView(TokenRefreshView):
                     # secure=not settings.DEBUG,
                     samesite="Lax",
                     secure=True,
-                    samesite="None",
+                    # samesite="None",
                     path="/",
                 )
 
