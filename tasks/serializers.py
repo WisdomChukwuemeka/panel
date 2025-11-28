@@ -92,7 +92,7 @@ class TaskReplySerializer(serializers.ModelSerializer):
 
     def validate_reply_message(self, value):
         if not value or not value.strip():
-            raise serializers.ValidationError("Reply message is required.")
+            raise serializers.ValidationError("Message is required.")
         return value.strip()
 
     def update(self, instance, validated_data):
