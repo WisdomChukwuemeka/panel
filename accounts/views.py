@@ -57,8 +57,8 @@ class UserListCreateView(generics.ListCreateAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             secure=True,
-            samesite="None"
-            # path="/",  
+            samesite="None",
+            path="/",  
         )
         response.set_cookie(
             key="refresh_token",
@@ -68,8 +68,8 @@ class UserListCreateView(generics.ListCreateAPIView):
             # secure=not settings.DEBUG,
             # samesite="None",
             secure=True,
-            samesite="None"
-            # path="/",  
+            samesite="None",
+            path="/",  
         )
 
         return response
@@ -134,8 +134,8 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             # samesite="Lax",
             secure=True,  
-            samesite="None" 
-            # path="/",  
+            samesite="None", 
+            path="/",  
         )
         response.set_cookie(
             key="refresh_token",
@@ -145,8 +145,8 @@ class LoginView(generics.GenericAPIView):
             # # secure=not settings.DEBUG,  
             # # samesite="None",   
             secure=True,
-            samesite="None"
-            # path="/",      
+            samesite="None",
+            path="/",      
         )
 
         return response  # Now correct
@@ -244,7 +244,7 @@ class CookieTokenRefreshView(TokenRefreshView):
                 httponly=True,
                 secure=True,
                 samesite="None",  # ← FIXED: Lax (safer with Vercel proxy)
-                # path="/",
+                path="/",
                 # ← NO DOMAIN! Let browser default to vercel.app
             )
 
@@ -258,7 +258,7 @@ class CookieTokenRefreshView(TokenRefreshView):
                     httponly=True,
                     secure=True,
                     samesite="None",  # ← FIXED: Lax
-                    # path="/",
+                    path="/",
                     # ← NO DOMAIN!
                 )
 
