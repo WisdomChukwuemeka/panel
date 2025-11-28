@@ -56,9 +56,9 @@ class UserListCreateView(generics.ListCreateAPIView):
             max_age=access_lifetime,
             httponly=True,
             # secure=not settings.DEBUG,
-            secure=True,
-            samesite="Lax",
+            samesite="None",
             path="/",
+            partitioned=True,
             # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
@@ -69,8 +69,9 @@ class UserListCreateView(generics.ListCreateAPIView):
             # secure=not settings.DEBUG,
             # samesite="None",
             secure=True,
-            samesite="Lax",
+            samesite="None",
             path="/",
+            partitioned=True,
             # domain=".scholar-panel.vercel.app"
         )
 
@@ -136,8 +137,9 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             # samesite="Lax",
             secure=True,  
-            samesite="Lax",  
+            samesite="None",   
             path="/",
+            partitioned=True,
             # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
@@ -148,8 +150,9 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             # samesite="Lax",
             secure=True,    
-            samesite="Lax",
+            samesite="None",   
             path="/",
+            partitioned=True,
             # domain=".scholar-panel.vercel.app"
         )
 
@@ -255,7 +258,8 @@ class CookieTokenRefreshView(TokenRefreshView):
                 secure=True,
                 samesite="None",
                 path="/",
-                domain=".scholar-panel.vercel.app"
+                partitioned=True,
+                # domain=".scholar-panel.vercel.app"
             )
 
             # Update refresh token (only if rotation enabled)
@@ -271,7 +275,8 @@ class CookieTokenRefreshView(TokenRefreshView):
                     secure=True,
                     samesite="None",
                     path="/",
-                    domain=".scholar-panel.vercel.app",
+                    partitioned=True,
+                    # domain=".scholar-panel.vercel.app",
                 )
 
             response.data = {"detail": "Token refreshed"}
