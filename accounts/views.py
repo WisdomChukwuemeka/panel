@@ -22,10 +22,6 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 
 
-secure = not settings.DEBUG  # True in prod, False in dev
-samesite = "None" if not settings.DEBUG else "Lax"
-domain = ".scholar-panel.vercel.app" if not settings.DEBUG else None
-
 # -----------------------
 # User List & Create
 # -----------------------
@@ -61,10 +57,11 @@ class UserListCreateView(generics.ListCreateAPIView):
             value=str(refresh.access_token),
             max_age=access_lifetime,
             httponly=True,
-            secure=secure,
-            samesite=samesite,
+            # secure=not settings.DEBUG,
+            secure=True,
+            samesite="None",
             path="/",
-            domain=domain,
+            # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -73,10 +70,10 @@ class UserListCreateView(generics.ListCreateAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             # samesite="None",
-            secure=secure,
-            samesite=samesite,
+            secure=True,
+            samesite="None",
             path="/",
-            domain=domain,
+            # domain=".scholar-panel.vercel.app"
         )
 
         return response
@@ -140,10 +137,10 @@ class LoginView(generics.GenericAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             # samesite="Lax",
-            secure=secure,
-            samesite=samesite,
+            secure=True,  
+            samesite="None",   
             path="/",
-            domain=domain,
+            # domain=".scholar-panel.vercel.app"
         )
         response.set_cookie(
             key="refresh_token",
@@ -152,10 +149,10 @@ class LoginView(generics.GenericAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             # samesite="Lax",
-            secure=secure,
-            samesite=samesite,
+            secure=True,    
+            samesite="None",   
             path="/",
-            domain=domain,
+            # domain=".scholar-panel.vercel.app"
         )
 
         return response  # Now correct
@@ -257,10 +254,10 @@ class CookieTokenRefreshView(TokenRefreshView):
                 httponly=True,
                 # secure=not settings.DEBUG,
                 # samesite="None",
-                secure=secure,
-                samesite=samesite,
+                secure=True,
+                samesite="None",
                 path="/",
-                domain=domain,
+                domain=".scholar-panel.vercel.app"
             )
 
             # Update refresh token (only if rotation enabled)
@@ -273,10 +270,10 @@ class CookieTokenRefreshView(TokenRefreshView):
                     httponly=True,
                     # secure=not settings.DEBUG,
                     # samesite="Lax",
-                    secure=secure,
-                    samesite=samesite,
+                    secure=True,
+                    samesite="None",
                     path="/",
-                    domain=domain,
+                    domain=".scholar-panel.vercel.app",
                 )
 
             response.data = {"detail": "Token refreshed"}
