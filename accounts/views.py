@@ -64,7 +64,9 @@ class UserListCreateView(generics.ListCreateAPIView):
             value=str(refresh),
             max_age=refresh_lifetime,
             httponly=True,
-            secure=not settings.DEBUG,
+            # secure=not settings.DEBUG,
+            # samesite="None",
+            secure=True,
             samesite="None",
             path="/",
         )
@@ -128,10 +130,10 @@ class LoginView(generics.GenericAPIView):
             value=str(refresh.access_token),
             max_age=access_lifetime,
             httponly=True,
-            secure=not settings.DEBUG,
-            samesite="Lax",
-            # secure=True,    for production
-            # samesite="None",    for production
+            # secure=not settings.DEBUG,
+            # samesite="Lax",
+            secure=True,  
+            samesite="None",   
             path="/",
         )
         response.set_cookie(
@@ -139,10 +141,10 @@ class LoginView(generics.GenericAPIView):
             value=str(refresh),
             max_age=refresh_lifetime,
             httponly=True,
-            secure=not settings.DEBUG,
-            samesite="Lax",
-            # secure=True,     for production
-            # samesite="None",     for production
+            # secure=not settings.DEBUG,
+            # samesite="Lax",
+            secure=True,    
+            samesite="None",   
             path="/",
         )
 
@@ -243,7 +245,9 @@ class CookieTokenRefreshView(TokenRefreshView):
                 max_age=access_lifetime,
                 expires=access_lifetime,
                 httponly=True,
-                secure=not settings.DEBUG,
+                # secure=not settings.DEBUG,
+                # samesite="None",
+                secure=True,
                 samesite="None",
                 path="/",
             )
@@ -256,8 +260,10 @@ class CookieTokenRefreshView(TokenRefreshView):
                     max_age=refresh_lifetime,
                     expires=refresh_lifetime,
                     httponly=True,
-                    secure=not settings.DEBUG,
-                    samesite="Lax",
+                    # secure=not settings.DEBUG,
+                    # samesite="Lax",
+                    secure=True,
+                    samesite="None",
                     path="/",
                 )
 
