@@ -57,7 +57,7 @@ class UserListCreateView(generics.ListCreateAPIView):
             httponly=True,
             # secure=not settings.DEBUG,
             secure=True,
-            samesite="None",
+            samesite="Lax",
             path="/",
             # domain=".scholar-panel.vercel.app"
         )
@@ -69,7 +69,7 @@ class UserListCreateView(generics.ListCreateAPIView):
             # secure=not settings.DEBUG,
             # samesite="None",
             secure=True,
-            samesite="None",
+            samesite="Lax",
             path="/",
             # domain=".scholar-panel.vercel.app"
         )
@@ -136,7 +136,7 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             # samesite="Lax",
             secure=True,  
-            samesite="None",   
+            samesite="Lax",  
             path="/",
             # domain=".scholar-panel.vercel.app"
         )
@@ -148,7 +148,7 @@ class LoginView(generics.GenericAPIView):
             # secure=not settings.DEBUG,
             # samesite="Lax",
             secure=True,    
-            samesite="None",   
+            samesite="Lax",
             path="/",
             # domain=".scholar-panel.vercel.app"
         )
