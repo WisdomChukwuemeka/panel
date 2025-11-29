@@ -655,15 +655,18 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3001",
 ]
 
+# After BASE_DIR definition, add:
+APPEND_SLASH = False  #
 
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_HEADERS = list(default_headers) + ["Cookie"]
-CORS_EXPOSE_HEADERS = ["Set-Cookie"]
 
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SAMESITE = "None"
-CSRF_COOKIE_SAMESITE = "None"
+# CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOW_HEADERS = list(default_headers) + ["Cookie"]
+# CORS_EXPOSE_HEADERS = ["Set-Cookie"]
+
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SECURE = True
+# SESSION_COOKIE_SAMESITE = "None"
+# CSRF_COOKIE_SAMESITE = "None"
 # SESSION_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
 # CSRF_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
 FRONTEND_DOMAIN = os.getenv("FRONTEND_DOMAIN", "scholar-panel.vercel.app")
@@ -699,7 +702,7 @@ SIMPLE_JWT = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "accounts.authentication.CookieJWTAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,

@@ -42,35 +42,37 @@ class UserListCreateView(generics.ListCreateAPIView):
         # Create the actual Response object FIRST
         response = Response({
             'user': UserSerializer(user).data,
+            # "access": str(refresh.access_token),
+            # "refresh": str(refresh),
             'message': 'Registration Successful',
             'role': user.role,
         }, status=status.HTTP_201_CREATED)
 
-        # Now safely set cookies
-        access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-        refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        # # Now safely set cookies
+        # access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+        # refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
-        response.set_cookie(
-            key="access_token",
-            value=str(refresh.access_token),
-            max_age=access_lifetime,
-            httponly=True,
-            # secure=not settings.DEBUG,
-            secure=True,
-            samesite="None",
-            path="/",  
-        )
-        response.set_cookie(
-            key="refresh_token",
-            value=str(refresh),
-            max_age=refresh_lifetime,
-            httponly=True,
-            # secure=not settings.DEBUG,
-            # samesite="None",
-            secure=True,
-            samesite="None",
-            path="/",  
-        )
+        # response.set_cookie(
+        #     key="access_token",
+        #     value=str(refresh.access_token),
+        #     max_age=access_lifetime,
+        #     httponly=True,
+        #     # secure=not settings.DEBUG,
+        #     secure=True,
+        #     samesite="None",
+        #     path="/",  
+        # )
+        # response.set_cookie(
+        #     key="refresh_token",
+        #     value=str(refresh),
+        #     max_age=refresh_lifetime,
+        #     httponly=True,
+        #     # secure=not settings.DEBUG,
+        #     # samesite="None",
+        #     secure=True,
+        #     samesite="None",
+        #     path="/",  
+        # )
 
         return response
 
@@ -119,35 +121,37 @@ class LoginView(generics.GenericAPIView):
 
         # Create response first!
         response = Response({
-            'user': UserSerializer(user).data,
-            'message': 'Login successful'
+            "user": UserSerializer(user).data,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "role": user.role,
         }, status=status.HTTP_200_OK)
 
-        access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-        refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        # access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+        # refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
-        response.set_cookie(
-            key="access_token",
-            value=str(refresh.access_token),
-            max_age=access_lifetime,
-            httponly=True,
-            # secure=not settings.DEBUG,
-            # samesite="Lax",
-            secure=True,  
-            samesite="None", 
-            path="/",  
-        )
-        response.set_cookie(
-            key="refresh_token",
-            value=str(refresh),
-            max_age=refresh_lifetime,
-            httponly=True,
-            # # secure=not settings.DEBUG,  
-            # # samesite="None",   
-            secure=True,
-            samesite="None",
-            path="/",      
-        )
+        # response.set_cookie(
+        #     key="access_token",
+        #     value=str(refresh.access_token),
+        #     max_age=access_lifetime,
+        #     httponly=True,
+        #     # secure=not settings.DEBUG,
+        #     # samesite="Lax",
+        #     secure=True,  
+        #     samesite="None", 
+        #     path="/",  
+        # )
+        # response.set_cookie(
+        #     key="refresh_token",
+        #     value=str(refresh),
+        #     max_age=refresh_lifetime,
+        #     httponly=True,
+        #     # # secure=not settings.DEBUG,  
+        #     # # samesite="None",   
+        #     secure=True,
+        #     samesite="None",
+        #     path="/",      
+        # )
 
         return response  # Now correct
 
@@ -211,76 +215,78 @@ class VerifyPasscodeView(APIView):
 
 
 
-class CookieTokenRefreshView(TokenRefreshView):
-    def post(self, request, *args, **kwargs):
-        refresh_token = request.COOKIES.get("refresh_token")
+# class CookieTokenRefreshView(TokenRefreshView):
+#     def post(self, request, *args, **kwargs):
+#         refresh_token = request.COOKIES.get("refresh_token")
 
-        if not refresh_token:
-            return Response({"detail": "No refresh token"}, status=401)
+#         if not refresh_token:
+#             return Response({"detail": "No refresh token"}, status=401)
 
-        # Inject refresh token into request.data for SimpleJWT
-        data = request.data.copy()
-        data["refresh"] = refresh_token
-        request.data.update(data)
+#         # Inject refresh token into request.data for SimpleJWT
+#         data = request.data.copy()
+#         data["refresh"] = refresh_token
+#         request.data.update(data)
 
-        try:
-            # Call SimpleJWT's refresh handler
-            response = super().post(request, *args, **kwargs)
-        except (InvalidToken, TokenError):
-            # CRITICAL: Tell frontend refresh token is expired
-            return Response({"detail": "Refresh token expired"}, status=401)
+#         try:
+#             # Call SimpleJWT's refresh handler
+#             response = super().post(request, *args, **kwargs)
+#         except (InvalidToken, TokenError):
+#             # CRITICAL: Tell frontend refresh token is expired
+#             return Response({"detail": "Refresh token expired"}, status=401)
 
-        # If refresh succeeded
-        if response.status_code == 200:
-            access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-            refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+#         # If refresh succeeded
+#         if response.status_code == 200:
+#             access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+#             refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
-            # Update access token cookie
-            response.set_cookie(
-                key="access_token",
-                value=response.data["access"],
-                max_age=access_lifetime,
-                expires=access_lifetime,  # Optional but good for consistency
-                httponly=True,
-                secure=True,
-                samesite="None",  # ← FIXED: Lax (safer with Vercel proxy)
-                path="/",
-                # ← NO DOMAIN! Let browser default to vercel.app
-            )
+#             # Update access token cookie
+#             response.set_cookie(
+#                 key="access_token",
+#                 value=response.data["access"],
+#                 max_age=access_lifetime,
+#                 expires=access_lifetime,  # Optional but good for consistency
+#                 httponly=True,
+#                 secure=True,
+#                 samesite="None",  # ← FIXED: Lax (safer with Vercel proxy)
+#                 path="/",
+#                 # ← NO DOMAIN! Let browser default to vercel.app
+#             )
 
-            # Update refresh token (only if rotation enabled)
-            if "refresh" in response.data:
-                response.set_cookie(
-                    key="refresh_token",
-                    value=response.data["refresh"],
-                    max_age=refresh_lifetime,
-                    expires=refresh_lifetime,
-                    httponly=True,
-                    secure=True,
-                    samesite="None",  # ← FIXED: Lax
-                    path="/",
-                    # ← NO DOMAIN!
-                )
+#             # Update refresh token (only if rotation enabled)
+#             if "refresh" in response.data:
+#                 response.set_cookie(
+#                     key="refresh_token",
+#                     value=response.data["refresh"],
+#                     max_age=refresh_lifetime,
+#                     expires=refresh_lifetime,
+#                     httponly=True,
+#                     secure=True,
+#                     samesite="None",  # ← FIXED: Lax
+#                     path="/",
+#                     # ← NO DOMAIN!
+#                 )
 
-            response.data = {"detail": "Token refreshed"}
+#             response.data = {"detail": "Token refreshed"}
 
-        return response
+#         return response
     
         
 # accounts/views.py
 class LogoutView(APIView):
-    def post(self, request):
-        try:
-            refresh_token = request.COOKIES.get("refresh_token")
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-        except:
-            pass
+    permission_classes = [AllowAny]
 
-        response = Response({"message": "Logged out"})
-        response.delete_cookie("access_token")
-        response.delete_cookie("refresh_token")
-        return response
+    def post(self, request):
+        refresh_token = request.data.get("refresh")
+
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            except Exception:
+                pass
+
+        return Response({"message": "Logged out successfully"}, status=200)
+
     
 
 class MeView(APIView):
