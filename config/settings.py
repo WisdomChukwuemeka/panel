@@ -659,18 +659,25 @@ CORS_ALLOWED_ORIGINS = [
 APPEND_SLASH = False  #
 
 
-# CORS_ALLOW_CREDENTIALS = True
-# CORS_ALLOW_HEADERS = list(default_headers) + ["Cookie"]
-# CORS_EXPOSE_HEADERS = ["Set-Cookie"]
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = list(default_headers) + ["Cookie"]
+CORS_EXPOSE_HEADERS = ["Set-Cookie"]
 
-# SESSION_COOKIE_SECURE = True
-# CSRF_COOKIE_SECURE = True
-# SESSION_COOKIE_SAMESITE = "None"
-# CSRF_COOKIE_SAMESITE = "None"
-# SESSION_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
-# CSRF_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = "None"
+CSRF_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
+CSRF_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
 FRONTEND_DOMAIN = os.getenv("FRONTEND_DOMAIN", "scholar-panel.vercel.app")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+if DEBUG:
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_DOMAIN = None
+    CSRF_COOKIE_DOMAIN = None
 
 X_FRAME_OPTIONS = "DENY"
 

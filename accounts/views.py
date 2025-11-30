@@ -1,5 +1,6 @@
 from rest_framework import generics, permissions, status, views
 from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
 from .models import User, Passcode
 from rest_framework.permissions import IsAdminUser, IsAuthenticated, AllowAny
@@ -20,17 +21,19 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
+
+
+access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+
+
 # -----------------------
 # User List & Create
 # -----------------------
-class UserListCreateView(generics.ListCreateAPIView):
+class UserListCreateView(generics.CreateAPIView):
     queryset = User.objects.all().order_by('-id')
     serializer_class = UserSerializer
     permission_classes = [permissions.AllowAny]  # Allow registration
-
-    def list(self, request, *args, **kwargs):
-        serializer = self.get_serializer(self.get_queryset(), many=True)
-        return Response({"status": "success", "data": serializer.data}, status=status.HTTP_200_OK)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -38,6 +41,7 @@ class UserListCreateView(generics.ListCreateAPIView):
         user = serializer.save()
 
         refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
 
         # Create the actual Response object FIRST
         response = Response({
@@ -48,31 +52,26 @@ class UserListCreateView(generics.ListCreateAPIView):
             'role': user.role,
         }, status=status.HTTP_201_CREATED)
 
-        # # Now safely set cookies
-        # access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-        # refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        
+        response.set_cookie(
+            "access_token",
+            access_token,
+            max_age=access_lifetime,
+            httponly=True,
+            secure = not settings.DEBUG,
+            samesite = "None" if not settings.DEBUG else "Lax",
+            path="/",
+        )
+        response.set_cookie(
+            "refresh_token",
+            str(refresh),
+            max_age=refresh_lifetime,
+            httponly=True,
+            secure = not settings.DEBUG,
+            samesite = "None" if not settings.DEBUG else "Lax",
 
-        # response.set_cookie(
-        #     key="access_token",
-        #     value=str(refresh.access_token),
-        #     max_age=access_lifetime,
-        #     httponly=True,
-        #     # secure=not settings.DEBUG,
-        #     secure=True,
-        #     samesite="None",
-        #     path="/",  
-        # )
-        # response.set_cookie(
-        #     key="refresh_token",
-        #     value=str(refresh),
-        #     max_age=refresh_lifetime,
-        #     httponly=True,
-        #     # secure=not settings.DEBUG,
-        #     # samesite="None",
-        #     secure=True,
-        #     samesite="None",
-        #     path="/",  
-        # )
+            path="/",
+        )
 
         return response
 
@@ -118,42 +117,39 @@ class LoginView(generics.GenericAPIView):
             return Response({"error": "This account is inactive."}, status=403)
 
         refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
 
         # Create response first!
         response = Response({
             "user": UserSerializer(user).data,
-            "access": str(refresh.access_token),
-            "refresh": str(refresh),
+            # "access": str(refresh.access_token),
+            # "refresh": str(refresh),
             "role": user.role,
         }, status=status.HTTP_200_OK)
 
-        # access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-        # refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        # Set cookies
+        response.set_cookie(
+            "access_token", 
+            access_token,
+            max_age=access_lifetime, 
+            httponly=True,
+            secure = not settings.DEBUG,
+            samesite = "None" if not settings.DEBUG else "Lax",
 
-        # response.set_cookie(
-        #     key="access_token",
-        #     value=str(refresh.access_token),
-        #     max_age=access_lifetime,
-        #     httponly=True,
-        #     # secure=not settings.DEBUG,
-        #     # samesite="Lax",
-        #     secure=True,  
-        #     samesite="None", 
-        #     path="/",  
-        # )
-        # response.set_cookie(
-        #     key="refresh_token",
-        #     value=str(refresh),
-        #     max_age=refresh_lifetime,
-        #     httponly=True,
-        #     # # secure=not settings.DEBUG,  
-        #     # # samesite="None",   
-        #     secure=True,
-        #     samesite="None",
-        #     path="/",      
-        # )
+            path="/",
+        )
+        response.set_cookie(
+            "refresh_token", 
+            str(refresh),
+            max_age=refresh_lifetime, 
+            httponly=True,
+            secure = not settings.DEBUG,
+            samesite = "None" if not settings.DEBUG else "Lax",
 
-        return response  # Now correct
+            path="/",
+        )
+
+        return response
 
 class BlockUserView(generics.UpdateAPIView):
     queryset = User.objects.all()
@@ -183,6 +179,7 @@ class PasscodeListCreateView(generics.ListCreateAPIView):
     queryset = Passcode.objects.all().order_by('-id')
     serializer_class = PasscodeSerializer
     permission_classes = [IsAuthenticated, IsSuperUser]
+    authentication_classes = [CookieJWTAuthentication]
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -215,83 +212,97 @@ class VerifyPasscodeView(APIView):
 
 
 
-# class CookieTokenRefreshView(TokenRefreshView):
-#     def post(self, request, *args, **kwargs):
-#         refresh_token = request.COOKIES.get("refresh_token")
+class CookieTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        refresh_token = request.COOKIES.get("refresh_token")
 
-#         if not refresh_token:
-#             return Response({"detail": "No refresh token"}, status=401)
+        if not refresh_token:
+            return Response({"detail": "No refresh token"}, status=401)
 
-#         # Inject refresh token into request.data for SimpleJWT
-#         data = request.data.copy()
-#         data["refresh"] = refresh_token
-#         request.data.update(data)
+        # Inject refresh token into request.data for SimpleJWT
+        data = request.data.copy()
+        data["refresh"] = refresh_token
+        request.data.update(data)
 
-#         try:
-#             # Call SimpleJWT's refresh handler
-#             response = super().post(request, *args, **kwargs)
-#         except (InvalidToken, TokenError):
-#             # CRITICAL: Tell frontend refresh token is expired
-#             return Response({"detail": "Refresh token expired"}, status=401)
+        try:
+            # Call SimpleJWT's refresh handler
+            response = super().post(request, *args, **kwargs)
+        except (InvalidToken, TokenError):
+            # CRITICAL: Tell frontend refresh token is expired
+            return Response({"detail": "Refresh token expired"}, status=401)
 
-#         # If refresh succeeded
-#         if response.status_code == 200:
-#             access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-#             refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        # If refresh succeeded
+        if response.status_code == 200:
+            access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+            refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 
-#             # Update access token cookie
-#             response.set_cookie(
-#                 key="access_token",
-#                 value=response.data["access"],
-#                 max_age=access_lifetime,
-#                 expires=access_lifetime,  # Optional but good for consistency
-#                 httponly=True,
-#                 secure=True,
-#                 samesite="None",  # ← FIXED: Lax (safer with Vercel proxy)
-#                 path="/",
-#                 # ← NO DOMAIN! Let browser default to vercel.app
-#             )
+            # Update access token cookie
+            response.set_cookie(
+                key="access_token",
+                value=response.data["access"],
+                max_age=access_lifetime,
+                expires=access_lifetime,  # Optional but good for consistency
+                httponly=True,
+                secure = not settings.DEBUG,
+                samesite = "None" if not settings.DEBUG else "Lax",
+  # ← FIXED: Lax (safer with Vercel proxy)
+                path="/",
+                # ← NO DOMAIN! Let browser default to vercel.app
+            )
 
-#             # Update refresh token (only if rotation enabled)
-#             if "refresh" in response.data:
-#                 response.set_cookie(
-#                     key="refresh_token",
-#                     value=response.data["refresh"],
-#                     max_age=refresh_lifetime,
-#                     expires=refresh_lifetime,
-#                     httponly=True,
-#                     secure=True,
-#                     samesite="None",  # ← FIXED: Lax
-#                     path="/",
-#                     # ← NO DOMAIN!
-#                 )
+            # Update refresh token (only if rotation enabled)
+            if "refresh" in response.data:
+                response.set_cookie(
+                    key="refresh_token",
+                    value=response.data["refresh"],
+                    max_age=refresh_lifetime,
+                    expires=refresh_lifetime,
+                    httponly=True,
+                    secure = not settings.DEBUG,
+                    samesite = "None" if not settings.DEBUG else "Lax",
+  # ← FIXED: Lax
+                    path="/",
+                    # ← NO DOMAIN!
+                )
 
-#             response.data = {"detail": "Token refreshed"}
+            response.data = {"detail": "Token refreshed"}
 
-#         return response
+        return response
     
         
 # accounts/views.py
+# class LogoutView(APIView):
+#     permission_classes = [AllowAny]
+
+#     def post(self, request):
+#         refresh_token = request.data.get("refresh")
+
+#         if refresh_token:
+#             try:
+#                 token = RefreshToken(refresh_token)
+#                 token.blacklist()
+#             except Exception:
+#                 pass
+
+#         return Response({"message": "Logged out successfully"}, status=200)
+
+
 class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        refresh_token = request.data.get("refresh")
+        response = Response({"message": "Logged out"}, status=200)
 
-        if refresh_token:
-            try:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            except Exception:
-                pass
+        response.delete_cookie("access_token", path="/")
+        response.delete_cookie("refresh_token", path="/")
 
-        return Response({"message": "Logged out successfully"}, status=200)
-
+        return response
     
 
 class MeView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [CookieJWTAuthentication] 
+    authentication_classes = [CookieJWTAuthentication]
+  # <-- Correct for localStorage + Authorization header
     
     def get(self, request):
         return Response({
@@ -301,6 +312,7 @@ class MeView(APIView):
             "role": request.user.role,
             "is_active": request.user.is_active,
         })
+
 
 
 
