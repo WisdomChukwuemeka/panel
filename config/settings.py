@@ -583,6 +583,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DEBUG", "False") == "True"
+# -----------------------------------------
+# Cookie Security (LOCAL vs PRODUCTION)
+# -----------------------------------------
+
+SECURE = not DEBUG                          # HTTPS only in production
+COOKIE_SAMESITE = "None" if not DEBUG else "Lax"   # Cross-site only in production
+COOKIE_DOMAIN = None if DEBUG else ".scholar-panel.vercel.app"
+
 
 PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
@@ -663,25 +671,32 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = list(default_headers) + ["Cookie"]
 CORS_EXPOSE_HEADERS = ["Set-Cookie"]
 
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SESSION_COOKIE_SAMESITE = "None"
-CSRF_COOKIE_SAMESITE = "None"
-SESSION_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
-CSRF_COOKIE_DOMAIN = ".scholar-panel.vercel.app"
+SESSION_COOKIE_SECURE = SECURE
+CSRF_COOKIE_SECURE = SECURE
+
+SESSION_COOKIE_SAMESITE = COOKIE_SAMESITE
+CSRF_COOKIE_SAMESITE = COOKIE_SAMESITE
+
+SESSION_COOKIE_DOMAIN = COOKIE_DOMAIN
+CSRF_COOKIE_DOMAIN = COOKIE_DOMAIN
 FRONTEND_DOMAIN = os.getenv("FRONTEND_DOMAIN", "scholar-panel.vercel.app")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-if DEBUG:
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
-    SESSION_COOKIE_SAMESITE = "Lax"
-    CSRF_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_DOMAIN = None
-    CSRF_COOKIE_DOMAIN = None
+
 
 X_FRAME_OPTIONS = "DENY"
 
 ROOT_URLCONF = "config.urls"
+
+DEBUG = os.getenv("DEBUG", "False") == "True"
+# -----------------------------------------
+# Cookie Security (LOCAL vs PRODUCTION)
+# -----------------------------------------
+
+SECURE = not DEBUG                          # HTTPS only in production
+COOKIE_SAMESITE = "None" if not DEBUG else "Lax"   # Cross-site only in production
+COOKIE_DOMAIN = None if DEBUG else ".scholar-panel.vercel.app"
+
+
 
 TEMPLATES = [
     {
@@ -709,7 +724,7 @@ SIMPLE_JWT = {
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "accounts.authentication.CookieJWTAuthentication",
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 10,

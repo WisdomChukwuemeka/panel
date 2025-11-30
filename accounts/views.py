@@ -11,8 +11,6 @@ from .permissions import IsSuperUser  #  import your custom permission
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.exceptions import Throttled
 from django.conf import settings
-access_lifetime = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
-refresh_lifetime = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -129,23 +127,23 @@ class LoginView(generics.GenericAPIView):
 
         # Set cookies
         response.set_cookie(
-            "access_token", 
-            access_token,
-            max_age=access_lifetime, 
+            key="access_token",
+            value=access_token,
+            max_age=access_lifetime,
             httponly=True,
-            secure = not settings.DEBUG,
-            samesite = "None" if not settings.DEBUG else "Lax",
-
+            secure=not settings.DEBUG,        # True in production
+            samesite="None" if not settings.DEBUG else "Lax",
             path="/",
+            # DO NOT SET domain= here! Let browser default
         )
-        response.set_cookie(
-            "refresh_token", 
-            str(refresh),
-            max_age=refresh_lifetime, 
-            httponly=True,
-            secure = not settings.DEBUG,
-            samesite = "None" if not settings.DEBUG else "Lax",
 
+        response.set_cookie(
+            key="refresh_token",
+            value=str(refresh),
+            max_age=refresh_lifetime,
+            httponly=True,
+            secure=not settings.DEBUG,
+            samesite="None" if not settings.DEBUG else "Lax",
             path="/",
         )
 
