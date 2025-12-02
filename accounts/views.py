@@ -258,26 +258,23 @@ class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        response = Response({"message": "Logged out successfully"}, status=200)
+        response = Response({"message": "Logged out"}, status=200)
 
-        # Get cookie settings safely
-        secure = getattr(settings, 'SESSION_COOKIE_SECURE', not settings.DEBUG)
-        samesite = getattr(settings, 'SESSION_COOKIE_SAMESITE', 'None' if not settings.DEBUG else 'Lax')
         domain = getattr(settings, 'SESSION_COOKIE_DOMAIN', None)
+        samesite = getattr(settings, 'SESSION_COOKIE_SAMESITE', 'None' if not settings.DEBUG else 'Lax')
 
-        # Delete cookies — only pass domain if it's not None
-        cookie_settings = {
+        # Must match login cookie params EXACTLY (except secure/httponly, Django ignores them)
+        delete_params = {
             "path": "/",
-            "secure": secure,
+            "domain": domain,
             "samesite": samesite,
         }
-        if domain:
-            cookie_settings["domain"] = domain
 
-        response.delete_cookie("access_token", **cookie_settings)
-        response.delete_cookie("refresh_token", **cookie_settings)
+        response.delete_cookie("access_token", **delete_params)
+        response.delete_cookie("refresh_token", **delete_params)
 
         return response
+
 
 
 
