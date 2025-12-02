@@ -1,14 +1,14 @@
 import os
 import dj_database_url
 
-# ✅ Only set production-specific overrides here
-# Don't re-import everything from settings
+# ✅ Only apply these settings if we're actually on Render
+# Check for Render-specific environment variable
+IS_RENDER = os.environ.get('RENDER_EXTERNAL_HOSTNAME') is not None
 
-RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if IS_RENDER:
+    # Production settings for Render only
+    RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 
-# ✅ Extend existing ALLOWED_HOSTS instead of replacing
-if RENDER_EXTERNAL_HOSTNAME:
-    # In production on Render
     ALLOWED_HOSTS = [
         RENDER_EXTERNAL_HOSTNAME,
         'scholar-panel.vercel.app',
@@ -25,36 +25,33 @@ if RENDER_EXTERNAL_HOSTNAME:
         'https://scholar-panel.vercel.app',
     ]
 
-# Force production mode
-DEBUG = False
+    # Force production mode
+    DEBUG = False
 
-# ✅ Use environment variable for SECRET_KEY
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable must be set in production")
+    # Use environment variable for SECRET_KEY
+    SECRET_KEY = os.environ.get('SECRET_KEY')
+    if not SECRET_KEY:
+        raise ValueError("SECRET_KEY environment variable must be set in production")
 
-# Database configuration for Render
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600,
-        ssl_require=True,
-    )
-}
-
-# Static files storage (Whitenoise for Render)
-STORAGES = {
-    'default': {
-        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
-    },
-    'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    # Database configuration for Render (PostgreSQL)
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
-}
 
-# ✅ IMPORTANT: Do NOT override cookie settings here
-# Let settings.py handle all cookie configurations
-# The main settings.py already has correct values:
-# - COOKIE_DOMAIN = None (works cross-domain)
-# - COOKIE_SAMESITE = "None" (for cross-site)
-# - SECURE = True (for HTTPS)
+    # Static files storage (Whitenoise for Render)
+    STORAGES = {
+        'default': {
+            'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
+        },
+        'staticfiles': {
+            'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+        }
+    }
+else:
+    # Local development - don't override anything
+    # Let settings.py handle all configuration
+    pass

@@ -59,7 +59,10 @@ def set_auth_cookies(response, access_token, refresh_token):
 
 
 class UserListCreateView(generics.CreateAPIView):
-    queryset = User.objects.all().order_by('-id')
+    """
+    Only allows POST to create a user. GET is NOT allowed.
+    """
+    queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -77,9 +80,7 @@ class UserListCreateView(generics.CreateAPIView):
             'role': user.role,
         }, status=status.HTTP_201_CREATED)
 
-        # ✅ Use helper function for consistent cookie settings
         set_auth_cookies(response, access_token, str(refresh))
-        
         return response
 
 

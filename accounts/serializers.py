@@ -107,6 +107,7 @@ class LoginSerializer(serializers.Serializer):
                 raise serializers.ValidationError("User does not exist")
             if user and not user.check_password(password):
                 raise serializers.ValidationError("Incorrect credentials, please try again.")
+            
             attrs['user'] = user
             return attrs
         
