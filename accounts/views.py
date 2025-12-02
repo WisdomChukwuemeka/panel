@@ -260,13 +260,30 @@ class LogoutView(APIView):
     def post(self, request):
         response = Response({"message": "Logged out"}, status=200)
 
-        # Get domain setting for consistent cookie deletion
+        secure = getattr(settings, 'SESSION_COOKIE_SECURE', True)
+        samesite = getattr(settings, 'SESSION_COOKIE_SAMESITE', "None")
         domain = getattr(settings, 'SESSION_COOKIE_DOMAIN', None)
 
-        response.delete_cookie("access_token", path="/", domain=domain)
-        response.delete_cookie("refresh_token", path="/", domain=domain)
+        # Delete access token
+        response.delete_cookie(
+            key="access_token",
+            path="/",
+            domain=domain,
+            secure=secure,
+            samesite=samesite,
+        )
+
+        # Delete refresh token
+        response.delete_cookie(
+            key="refresh_token",
+            path="/",
+            domain=domain,
+            secure=secure,
+            samesite=samesite,
+        )
 
         return response
+
 
 
 class MeView(APIView):
