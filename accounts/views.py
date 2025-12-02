@@ -258,29 +258,24 @@ class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        response = Response({"message": "Logged out"}, status=200)
+        response = Response({"message": "Logged out successfully"}, status=200)
 
-        secure = getattr(settings, 'SESSION_COOKIE_SECURE', True)
-        samesite = getattr(settings, 'SESSION_COOKIE_SAMESITE', "None")
+        # Get cookie settings safely
+        secure = getattr(settings, 'SESSION_COOKIE_SECURE', not settings.DEBUG)
+        samesite = getattr(settings, 'SESSION_COOKIE_SAMESITE', 'None' if not settings.DEBUG else 'Lax')
         domain = getattr(settings, 'SESSION_COOKIE_DOMAIN', None)
 
-        # Delete access token
-        response.delete_cookie(
-            key="access_token",
-            path="/",
-            domain=domain,
-            secure=secure,
-            samesite=samesite,
-        )
+        # Delete cookies — only pass domain if it's not None
+        cookie_settings = {
+            "path": "/",
+            "secure": secure,
+            "samesite": samesite,
+        }
+        if domain:
+            cookie_settings["domain"] = domain
 
-        # Delete refresh token
-        response.delete_cookie(
-            key="refresh_token",
-            path="/",
-            domain=domain,
-            secure=secure,
-            samesite=samesite,
-        )
+        response.delete_cookie("access_token", **cookie_settings)
+        response.delete_cookie("refresh_token", **cookie_settings)
 
         return response
 
