@@ -85,6 +85,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:3001",
+    "http://10.212.16.240:3001",
 ]
 
 APPEND_SLASH = False
@@ -107,6 +108,9 @@ CSRF_COOKIE_DOMAIN = COOKIE_DOMAIN
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 X_FRAME_OPTIONS = "DENY"
+USE_X_FORWARDED_HOST = True
+SECURE_SSL_REDIRECT = not DEBUG
+
 
 ROOT_URLCONF = "config.urls"
 
