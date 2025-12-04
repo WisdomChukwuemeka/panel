@@ -16,6 +16,8 @@ if IS_RENDER:
         '127.0.0.1',
     ]
     
+    CORS_ALLOW_CREDENTIALS = True
+    
     CSRF_TRUSTED_ORIGINS = [
         f'https://{RENDER_EXTERNAL_HOSTNAME}',
         'https://scholar-panel.vercel.app',
