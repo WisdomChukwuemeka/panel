@@ -105,7 +105,7 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
     "cookie",           # ← Add this
     "set-cookie",       # ← Add this
-]
+] + list(default_headers)
 
 CORS_EXPOSE_HEADERS = ["Set-Cookie"]
 
