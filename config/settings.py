@@ -18,7 +18,7 @@ DEBUG = os.getenv("DEBUG", "False") == "True"
 SECURE = not DEBUG
 COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
 COOKIE_DOMAIN = None  # ✅ CHANGED: Let browser handle domain automatically
-
+AUTH_COOKIE_SECURE = SECURE
 PAYSTACK_PUBLIC_KEY = config("PAYSTACK_PUBLIC_KEY", default="")
 PAYSTACK_SECRET_KEY = config("PAYSTACK_SECRET_KEY", default="")
 
@@ -140,10 +140,10 @@ SIMPLE_JWT = {
     # 🔥 REQUIRED FOR COOKIE AUTH (you forgot these)
     "AUTH_COOKIE": "access_token",                      # Cookie name
     "AUTH_COOKIE_REFRESH": "refresh_token",
-    "AUTH_COOKIE_SECURE": True,                   # Secure cookies on production
+    "AUTH_COOKIE_SECURE": AUTH_COOKIE_SECURE,                   # Secure cookies on production
     "AUTH_COOKIE_HTTP_ONLY": True,                # JS cannot access cookie
     "AUTH_COOKIE_PATH": "/",                      # Cookie available everywhere
-    "AUTH_COOKIE_SAMESITE": "None",               # Required for cross-site
+    "AUTH_COOKIE_SAMESITE": COOKIE_SAMESITE,              # Required for cross-site
 }
 
 REST_FRAMEWORK = {
