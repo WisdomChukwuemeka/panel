@@ -90,10 +90,21 @@ CORS_ALLOWED_ORIGINS = [
 
 APPEND_SLASH = False
 
-CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_HEADERS = list(default_headers) + [
-    "Cookie",
+CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
+
+# Allow the Cookie header
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
     "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "cookie",           # ← Add this
+    "set-cookie",       # ← Add this
 ]
 
 CORS_EXPOSE_HEADERS = ["Set-Cookie"]
