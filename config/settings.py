@@ -136,6 +136,14 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
+    
+    # 🔥 REQUIRED FOR COOKIE AUTH (you forgot these)
+    "AUTH_COOKIE": "access",                      # Cookie name
+    "AUTH_COOKIE_REFRESH": "refresh",
+    "AUTH_COOKIE_SECURE": True,                   # Secure cookies on production
+    "AUTH_COOKIE_HTTP_ONLY": True,                # JS cannot access cookie
+    "AUTH_COOKIE_PATH": "/",                      # Cookie available everywhere
+    "AUTH_COOKIE_SAMESITE": "None",               # Required for cross-site
 }
 
 REST_FRAMEWORK = {
