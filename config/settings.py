@@ -138,8 +138,8 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     
     # 🔥 REQUIRED FOR COOKIE AUTH (you forgot these)
-    "AUTH_COOKIE": "access",                      # Cookie name
-    "AUTH_COOKIE_REFRESH": "refresh",
+    "AUTH_COOKIE": "access_token",                      # Cookie name
+    "AUTH_COOKIE_REFRESH": "refresh_token",
     "AUTH_COOKIE_SECURE": True,                   # Secure cookies on production
     "AUTH_COOKIE_HTTP_ONLY": True,                # JS cannot access cookie
     "AUTH_COOKIE_PATH": "/",                      # Cookie available everywhere
