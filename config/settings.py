@@ -88,6 +88,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://10.212.16.240:3001",
 ]
 
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_CREDENTIALS = True
+
+
 APPEND_SLASH = False
 
 CORS_ORIGIN_WHITELIST = CORS_ALLOWED_ORIGINS
@@ -103,8 +107,8 @@ CORS_ALLOW_HEADERS = [
     "user-agent",
     "x-csrftoken",
     "x-requested-with",
-    "cookie",           # ← Add this
-    "set-cookie",       # ← Add this
+    # "cookie",           # ← Add this
+    # "set-cookie",       # ← Add this
 ] + list(default_headers)
 
 CORS_EXPOSE_HEADERS = ["Set-Cookie"]
